@@ -1,0 +1,14 @@
+syntax: regexp
+
+# [General ignore]
+(?i)\.(te?mp|bak|sav|orig|log)$
+(?i)(\.svn|\.git)
+(?i)^thumbs.db$
+\b(tmp)/.* # ignore content of any 'tmp/' folder
+
+# [msvs development]
+(?i)\.vs
+(?i)\.(obj|iobj|idb|pdb|ipdb|ilk|lastbuildstate|tlog)$
+(?i)\.(suo|db|ipch)$
+(?i)(unsuccessfulbuild)
+(?i)\.(exe|res)$
