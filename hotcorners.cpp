@@ -11,7 +11,8 @@
 
     BUILD
     ---------------------------------------------
-    Compile with MSVC2017
+    MSVC2017: /O2 /std:c++17
+    gcc: -O3 -std=c++17
 
     RELEASE HISTORY
     ---------------------------------------------
@@ -60,44 +61,44 @@
 constexpr LONG corner_size = 20; // [pix] Zones size in screen area
 constexpr DWORD dwell_time = 300; // [ms] Cursor dwell time for auto-trigger
 
+// Actions to trigger: instead of reading from a config file,
+// with compile time data we should avoid needless tests
+using action_t = std::basic_string_view<TCHAR>;
 
 // [top-left]
 // mouse-dwell: <tasks> (WIN+TAB)
 
 // [top-right]
-//std::string_view Rtr_lclick = "A:\\Apps\\FileTypesMan.exe";
-
-// I want compile time code, using preprocessor: ugly, but get things done
-#define RTR_LCLICK "A:\\Apps\\DwordBuilder.exe"
-#define RTR_MCLICK "A:\\Apps\\FileTypesMan.exe"
-//#define RTR_RCLICK ""
-#define RTR_XCLICK "A:\\Apps\\FileTypesMan.exe"
-#define RTR_WHEELFWD "%windir%\\system32\\charmap.exe"
-#define RTR_WHEELBCK "%windir%\\system32\\SnippingTool.exe"
+constexpr action_t Rtr_lclick("A:\\Apps\\DwordBuilder.exe");
+constexpr action_t Rtr_mclick(""); // A:\\Apps\\FileTypesMan.exe
+constexpr action_t Rtr_rclick("");
+constexpr action_t Rtr_xclick("");
+constexpr action_t Rtr_wheelfwd("%windir%\\system32\\SnippingTool.exe");
+constexpr action_t Rtr_wheelbck("%windir%\\system32\\SnippingTool.exe");
 
 // [right]
-#define RR_LCLICK "%UserProfile%\\Macotec"
-#define RR_MCLICK "%UserProfile%\\Devel-Bcb"
-#define RR_RCLICK "%UserProfile%\\Macotec\\Macotec-Documents"
-#define RR_XCLICK "%UserProfile%\\Macotec\\Machines"
-#define RR_WHEELFWD "%UserProfile%\\Macotec\\Machines\\m32-Float"
-#define RR_WHEELBCK "%UserProfile%\\Macotec\\Machines\\m32-Strato"
+constexpr action_t Rr_lclick("%UserProfile%\\Macotec");
+constexpr action_t Rr_mclick("%UserProfile%\\Macotec\\Devel-Bcb");
+constexpr action_t Rr_rclick("%UserProfile%\\Macotec\\Macotec-Documents");
+constexpr action_t Rr_xclick("%UserProfile%\\Macotec\\Machines");
+constexpr action_t Rr_wheelfwd("%UserProfile%\\Macotec\\Machines\\m32-Float");
+constexpr action_t Rr_wheelbck("%UserProfile%\\Macotec\\Machines\\m32-Strato");
 
 // [left]
-#define RL_LCLICK "%UserProfile%"
-#define RL_MCLICK "%UserProfile%\\Dev"
-//#define RL_RCLICK "%UserProfile%\\Bin"
-//#define RL_XCLICK "%UserProfile%\\Sys"
-//#define RL_WHEELFWD "%UserProfile%\\Dev"
-//#define RL_WHEELBCK "%UserProfile%\\Dev"
+constexpr action_t Rl_lclick("%UserProfile%");
+constexpr action_t Rl_mclick("%UserProfile%\\Dev");
+constexpr action_t Rl_rclick(""); // %UserProfile%\\Bin
+constexpr action_t Rl_xclick("%UserProfile%\\Sys");
+constexpr action_t Rl_wheelfwd(""); // %UserProfile%\\Dev
+constexpr action_t Rl_wheelbck(""); // %UserProfile%\\Dev
 
 // [top]
-#define RT_LCLICK "%windir%\\system32\\cmd.exe" // /K \"cd %UserProfile%\"
-//#define RT_MCLICK ""
-//#define RT_RCLICK ""
-//#define RT_XCLICK ""
-//#define RT_WHEELFWD ""
-#define RT_WHEELBCK "%windir%\\system32\\cmd.exe" // /K \"cd %UserProfile%\"
+constexpr action_t Rt_lclick("%windir%\\system32\\calc.exe"); // /K \"cd %UserProfile%\"
+constexpr action_t Rt_mclick("%windir%\\system32\\charmap.exe");
+constexpr action_t Rt_rclick("");
+constexpr action_t Rt_xclick("A:\\Apps\\FileTypesMan.exe");
+constexpr action_t Rt_wheelfwd("%SystemRoot%\\system32\\WindowsPowerShell\\v1.0\\powershell.exe"); // %HOMEDRIVE%%HOMEPATH%
+constexpr action_t Rt_wheelbck("%windir%\\system32\\cmd.exe");  // /K \"cd %UserProfile%\"
 
 
 // Keyboard inputs
@@ -148,7 +149,7 @@ void shell_exec(LPCTSTR pth) noexcept
     ShExecInfo.lpFile = buf.data(); // TCHAR[MAX_PATH]
     ShExecInfo.lpParameters = NULL;
     ShExecInfo.lpDirectory = NULL;
-    ShExecInfo.nShow = SW_SHOW; // SW_SHOWNORMAL, SW_SHOWNA
+    ShExecInfo.nShow = SW_SHOWNORMAL; // SW_SHOW, SW_SHOWNA
     ShExecInfo.hInstApp = NULL;
     ::ShellExecuteEx(&ShExecInfo);
 
@@ -313,12 +314,9 @@ static LRESULT CALLBACK mouseHookCallback(int nCode, WPARAM wParam, LPARAM lPara
     //    POINT     pt          // Coordinates
     //    DWORD     mouseData   // WM_MOUSEWHEEL: hiword>0:wheel-fwd, hiword<0:wheel-bck
     //                          // WM_*BUTTON*: hiword=1:btn1, hiword=2:btn2
-    //    DWORD     flags       //
-    //    DWORD     time        // Time stamp
-    //    ULONG_PTR dwExtraInfo //
 
     // Zones with autotrigger: check if mouse moved
-    if( wParam == WM_MOUSEMOVE )
+    if( wParam==WM_MOUSEMOVE )
        {// 'Mouse moved'
 
         // ----------------------------- "top left" zone
@@ -356,215 +354,188 @@ static LRESULT CALLBACK mouseHookCallback(int nCode, WPARAM wParam, LPARAM lPara
     else
        {// 'Other mouse event'
         //EVTLOG("WM_?? 0x" << std::hex << wParam)
+        
+        // Compile-time facilities: this should avoid needless tests
+        constexpr bool Rtr_has_wheel_actions = Rtr_wheelfwd.size()>0 && Rtr_wheelbck.size()>0;
+        constexpr bool Rtr_has_actions = Rtr_lclick.size()>0 || Rtr_mclick.size()>0 || Rtr_rclick.size()>0 || Rtr_xclick.size()>0 || Rtr_has_wheel_actions;
+        constexpr bool Rr_has_wheel_actions = Rr_wheelfwd.size()>0 && Rr_wheelbck.size()>0;
+        constexpr bool Rr_has_actions = Rr_lclick.size()>0 || Rr_mclick.size()>0 || Rr_rclick.size()>0 || Rr_xclick.size()>0 || Rr_has_wheel_actions;
+        constexpr bool Rl_has_wheel_actions = Rl_wheelfwd.size()>0 && Rl_wheelbck.size()>0;
+        constexpr bool Rl_has_actions = Rl_lclick.size()>0 || Rl_mclick.size()>0 || Rl_rclick.size()>0 || Rl_xclick.size()>0 || Rl_has_wheel_actions;
+        constexpr bool Rt_has_wheel_actions = Rt_wheelfwd.size()>0 && Rt_wheelbck.size()>0;
+        constexpr bool Rt_has_actions = Rt_lclick.size()>0 || Rt_mclick.size()>0 || Rt_rclick.size()>0 || Rt_xclick.size()>0 || Rt_has_wheel_actions;
 
         // ----------------------------- "top right" zone
-      #if defined(RTR_LCLICK) || defined(RTR_MCLICK) || defined(RTR_RCLICK) || defined(RTR_XCLICK) || (defined(RTR_WHEELFWD) && defined(RTR_WHEELBCK))
-        if( in_rect(Rtr, evt->pt) )
+        if( Rtr_has_actions && in_rect(Rtr, evt->pt) )
            {
-          #ifdef RTR_LCLICK
-            if( wParam == WM_LBUTTONDOWN )
-               {// 'Left click'
+            // 'Left click'
+            if( Rtr_lclick.size()>0 && wParam==WM_LBUTTONDOWN )
+               {
                 EVTLOG("Left click in top right corner " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( RTR_LCLICK );
-               } // 'Left click'
-          #else
-            if( false ) ;
-          #endif
-          #ifdef RTR_RCLICK
-            else if( wParam == WM_RBUTTONDOWN )
-               {// 'Right click'
+                shell_exec( Rtr_lclick.data() );
+               }
+            // 'Right click'
+            else if( Rtr_rclick.size()>0 && wParam==WM_RBUTTONDOWN )
+               {
                 EVTLOG("Right click in top right corner " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( RTR_RCLICK );
-               } // 'Right click'
-          #endif
-          #ifdef RTR_MCLICK
-            else if( wParam == WM_MBUTTONDOWN )
-               {// 'Middle click'
+                shell_exec( Rtr_rclick.data() );
+               }
+            // 'Middle click'
+            else if( Rtr_mclick.size()>0 && wParam==WM_MBUTTONDOWN )
+               {
                 EVTLOG("Middle click in top right corner " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( RTR_MCLICK );
-               } // 'Middle click'
-          #endif
-          #ifdef RTR_XCLICK
-            else if( wParam == WM_XBUTTONDOWN )
-               {// 'eXpansion button click'
+                shell_exec( Rtr_mclick.data() );
+               }
+            // 'eXpansion button click'
+            else if( Rtr_xclick.size()>0 && wParam==WM_XBUTTONDOWN )
+               {
                 EVTLOG("X click in top right corner " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( RTR_XCLICK );
-               } // 'eXpansion button click'
-          #endif
-          #if defined(RTR_WHEELFWD) && defined(RTR_WHEELBCK)
-            else if( wParam == WM_MOUSEWHEEL )
-               {// 'Mouse wheel'
-                if( hi_word(evt->mouseData)>0 )
-                     {
-                      EVTLOG("Fwd Wheel in top right corner " << hi_word(evt->mouseData))
-                      shell_exec( RTR_WHEELFWD );
-                     }
-                else {
-                      EVTLOG("Bck Wheel in top right corner " << hi_word(evt->mouseData))
-                      shell_exec( RTR_WHEELBCK );
-                     }
-               } // 'Mouse wheel'
-          #endif
-            // WM_LBUTTONDBLCLK  // 'Left double click'
-            // WM_XBUTTONDBLCLK // 'eXpansion button double click'
-            // WM_RBUTTONDBLCLK // 'Right double click'
+                shell_exec( Rtr_xclick.data() );
+               }
+            // 'Mouse wheel'
+            else if( Rtr_has_wheel_actions && wParam==WM_MOUSEWHEEL )
+               {
+                if( Rtr_wheelfwd.size()>0 && hi_word(evt->mouseData)>0 )
+                   {
+                    EVTLOG("Fwd Wheel in top right corner " << hi_word(evt->mouseData))
+                    shell_exec( Rtr_wheelfwd.data() );
+                   }
+                else if( Rtr_wheelbck.size() && hi_word(evt->mouseData)<0 )
+                   {
+                    EVTLOG("Bck Wheel in top right corner " << hi_word(evt->mouseData))
+                    shell_exec( Rtr_wheelbck.data() );
+                   }
+               }
            } // "top right" zone
-      #else
-        if( false ) ;
-      #endif
 
-      #if defined(RR_LCLICK) || defined(RR_MCLICK) || defined(RR_RCLICK) || defined(RR_XCLICK) || (defined(RR_WHEELFWD) && defined(RR_WHEELBCK))
         // ----------------------------- "right band" zone
-        else if( in_rect(Rr, evt->pt) )
+        else if( Rr_has_actions && in_rect(Rr, evt->pt) )
            {
-          #ifdef RR_LCLICK
-            if( wParam == WM_LBUTTONDOWN )
-               {// 'Left click'
+            // 'Left click'
+            if( Rr_lclick.size()>0 && wParam==WM_LBUTTONDOWN )
+               {
                 EVTLOG("Left click in right band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( RR_LCLICK );
-               } // 'Left click'
-          #else
-            if( false ) ;
-          #endif
-          #ifdef RR_RCLICK
-            else if( wParam == WM_RBUTTONDOWN )
-               {// 'Right click'
+                shell_exec( Rr_lclick.data() );
+               }
+            // 'Right click'
+            else if( Rr_rclick.size()>0 && wParam==WM_RBUTTONDOWN )
+               {
                 EVTLOG("Right click in right band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( RR_RCLICK );
-               } // 'Right click'
-          #endif
-          #ifdef RR_MCLICK
-            else if( wParam == WM_MBUTTONDOWN )
-               {// 'Middle click'
+                shell_exec( Rr_rclick.data() );
+               }
+            // 'Middle click'
+            else if( Rr_mclick.size()>0 && wParam==WM_MBUTTONDOWN )
+               {
                 EVTLOG("Middle click in right band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( RR_MCLICK );
-               } // 'Middle click'
-          #endif
-          #ifdef RR_XCLICK
-            else if( wParam == WM_XBUTTONDOWN )
-               {// 'eXpansion button click'
+                shell_exec( Rr_mclick.data() );
+               }
+            // 'eXpansion button click'
+            else if( Rr_xclick.size()>0 && wParam==WM_XBUTTONDOWN )
+               {
                 EVTLOG("X click in right band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( RR_XCLICK );
-               } // 'eXpansion button click'
-          #endif
-          #if defined(RR_WHEELFWD) && defined(RR_WHEELBCK)
-            else if( wParam == WM_MOUSEWHEEL )
-               {// 'Mouse wheel'
-                if( hi_word(evt->mouseData)>0 )
-                     {
-                      EVTLOG("Fwd Wheel in right band " << hi_word(evt->mouseData))
-                      shell_exec( RR_WHEELFWD );
-                     }
-                else {
-                      EVTLOG("Bck Wheel in right band " << hi_word(evt->mouseData))
-                      shell_exec( RR_WHEELBCK );
-                     }
-               } // 'Mouse wheel'
-          #endif
+                shell_exec( Rr_xclick.data() );
+               }
+            // 'Mouse wheel'
+            else if( Rr_has_wheel_actions && wParam==WM_MOUSEWHEEL )
+               {
+                if( Rr_wheelfwd.size()>0 && hi_word(evt->mouseData)>0 )
+                   {
+                    EVTLOG("Fwd Wheel in right band " << hi_word(evt->mouseData))
+                    shell_exec( Rr_wheelfwd.data() );
+                   }
+                else if( Rr_wheelbck.size() && hi_word(evt->mouseData)<0 )
+                   {
+                    EVTLOG("Bck Wheel in right band " << hi_word(evt->mouseData))
+                    shell_exec( Rr_wheelbck.data() );
+                   }
+               }
            } // "right band" zone
-      #endif
 
-      #if defined(RL_LCLICK) || defined(RL_MCLICK) || defined(RL_RCLICK) || defined(RL_XCLICK) || (defined(RL_WHEELFWD) && defined(RL_WHEELBCK))
         // ----------------------------- "left band" zone
-        else if( in_rect(Rl, evt->pt) )
+        else if( Rl_has_actions && in_rect(Rl, evt->pt) )
            {
-          #ifdef RL_LCLICK
-            if( wParam == WM_LBUTTONDOWN )
-               {// 'Left click'
+            // 'Left click'
+            if( Rl_lclick.size()>0 && wParam==WM_LBUTTONDOWN )
+               {
                 EVTLOG("Left click in left band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( RL_LCLICK );
-               } // 'Left click'
-          #else
-            if( false ) ;
-          #endif
-          #ifdef RL_RCLICK
-            else if( wParam == WM_RBUTTONDOWN )
-               {// 'Right click'
+                shell_exec( Rl_lclick.data() );
+               }
+            // 'Right click'
+            else if( Rl_rclick.size()>0 && wParam==WM_RBUTTONDOWN )
+               {
                 EVTLOG("Right click in left band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( RL_RCLICK );
-               } // 'Right click'
-          #endif
-          #ifdef RL_MCLICK
-            else if( wParam == WM_MBUTTONDOWN )
-               {// 'Middle click'
+                shell_exec( Rl_rclick.data() );
+               }
+            // 'Middle click'
+            else if( Rl_mclick.size()>0 && wParam==WM_MBUTTONDOWN )
+               {
                 EVTLOG("Middle click in left band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( RL_MCLICK );
-               } // 'Middle click'
-          #endif
-          #ifdef RL_XCLICK
-            else if( wParam == WM_XBUTTONDOWN )
-               {// 'eXpansion button click'
+                shell_exec( Rl_mclick.data() );
+               }
+            // 'eXpansion button click'
+            else if( Rl_xclick.size()>0 && wParam==WM_XBUTTONDOWN )
+               {
                 EVTLOG("X click in left band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( RL_XCLICK );
-               } // 'eXpansion button click'
-          #endif
-          #if defined(RL_WHEELFWD) && defined(RL_WHEELBCK)
-            else if( wParam == WM_MOUSEWHEEL )
-               {// 'Mouse wheel'
-                if( hi_word(evt->mouseData)>0 )
-                     {
-                      EVTLOG("Fwd Wheel in left band " << hi_word(evt->mouseData))
-                      shell_exec( RL_WHEELFWD );
-                     }
-                else {
-                      EVTLOG("Bck Wheel in left band " << hi_word(evt->mouseData))
-                      shell_exec( RL_WHEELBCK );
-                     }
-               } // 'Mouse wheel'
-          #endif
+                shell_exec( Rl_xclick.data() );
+               }
+            // 'Mouse wheel'
+            else if( Rl_has_wheel_actions && wParam==WM_MOUSEWHEEL )
+               {
+                if( Rl_wheelfwd.size()>0 && hi_word(evt->mouseData)>0 )
+                   {
+                    EVTLOG("Fwd Wheel in left band " << hi_word(evt->mouseData))
+                    shell_exec( Rl_wheelfwd.data() );
+                   }
+                else if( Rl_wheelbck.size() && hi_word(evt->mouseData)<0 )
+                   {
+                    EVTLOG("Bck Wheel in left band " << hi_word(evt->mouseData))
+                    shell_exec( Rl_wheelbck.data() );
+                   }
+               }
            } // "left band" zone
-      #endif
 
-      #if defined(RT_LCLICK) || defined(RT_MCLICK) || defined(RT_RCLICK) || defined(RT_XCLICK) || (defined(RT_WHEELFWD) && defined(RT_WHEELBCK))
         // ----------------------------- "top band" zone
-        else if( in_rect(Rt, evt->pt) )
+        else if( Rt_has_actions && in_rect(Rt, evt->pt) )
            {
-          #ifdef RT_LCLICK
-            if( wParam == WM_LBUTTONDOWN )
-               {// 'Left click'
+            // 'Left click'
+            if( Rt_lclick.size()>0 && wParam==WM_LBUTTONDOWN )
+               {
                 EVTLOG("Left click in top band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( RT_LCLICK );
-               } // 'Left click'
-          #else
-            if( false ) ;
-          #endif
-          #ifdef RT_RCLICK
-            else if( wParam == WM_RBUTTONDOWN )
-               {// 'Right click'
+                shell_exec( Rt_lclick.data() );
+               }
+            // 'Right click'
+            else if( Rt_rclick.size()>0 && wParam==WM_RBUTTONDOWN )
+               {
                 EVTLOG("Right click in top band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( RT_RCLICK );
-               } // 'Right click'
-          #endif
-          #ifdef RT_MCLICK
-            else if( wParam == WM_MBUTTONDOWN )
-               {// 'Middle click'
+                shell_exec( Rt_rclick.data() );
+               }
+            // 'Middle click'
+            else if( Rt_mclick.size()>0 && wParam==WM_MBUTTONDOWN )
+               {
                 EVTLOG("Middle click in top band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( RT_MCLICK );
-               } // 'Middle click'
-          #endif
-          #ifdef RT_XCLICK
-            else if( wParam == WM_XBUTTONDOWN )
-               {// 'eXpansion button click'
+                shell_exec( Rt_mclick.data() );
+               }
+            // 'eXpansion button click'
+            else if( Rt_xclick.size()>0 && wParam==WM_XBUTTONDOWN )
+               {
                 EVTLOG("X click in top band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( RT_XCLICK );
-               } // 'eXpansion button click'
-          #endif
-          #if defined(RT_WHEELFWD) && defined(RT_WHEELBCK)
-            else if( wParam == WM_MOUSEWHEEL )
-               {// 'Mouse wheel'
-                if( hi_word(evt->mouseData)>0 )
-                     {
-                      EVTLOG("Fwd Wheel in top band " << hi_word(evt->mouseData))
-                      shell_exec( RT_WHEELFWD );
-                     }
-                else {
-                      EVTLOG("Bck Wheel in top band " << hi_word(evt->mouseData))
-                      shell_exec( RT_WHEELBCK );
-                     }
-               } // 'Mouse wheel'
-          #endif
+                shell_exec( Rt_xclick.data() );
+               }
+            // 'Mouse wheel'
+            else if( Rt_has_wheel_actions && wParam==WM_MOUSEWHEEL )
+               {
+                if( Rt_wheelfwd.size()>0 && hi_word(evt->mouseData)>0 )
+                   {
+                    EVTLOG("Fwd Wheel in top band " << hi_word(evt->mouseData))
+                    shell_exec( Rt_wheelfwd.data() );
+                   }
+                else if( Rt_wheelbck.size() && hi_word(evt->mouseData)<0 )
+                   {
+                    EVTLOG("Bck Wheel in top band " << hi_word(evt->mouseData))
+                    shell_exec( Rt_wheelbck.data() );
+                   }
+               }
            } // "top band" zone
-      #endif
 
        } // 'Other mouse event'
 
