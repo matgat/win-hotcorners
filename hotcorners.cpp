@@ -58,7 +58,7 @@
 
 
 // Settings
-constexpr LONG corner_size = 20; // [pix] Zones size in screen area
+constexpr LONG corner_size = 5; // [pix] Corner area size
 constexpr DWORD dwell_time = 300; // [ms] Cursor dwell time for auto-trigger
 
 // Actions to trigger: instead of reading from a config file,
@@ -78,9 +78,9 @@ constexpr action_t Rtr_wheelbck("%windir%\\system32\\SnippingTool.exe");
 
 // [right]
 constexpr action_t Rr_lclick("%UserProfile%\\Macotec");
-constexpr action_t Rr_mclick("%UserProfile%\\Macotec\\Devel-Bcb");
+constexpr action_t Rr_mclick("%UserProfile%\\Macotec\\Machines");
 constexpr action_t Rr_rclick("%UserProfile%\\Macotec\\Macotec-Documents");
-constexpr action_t Rr_xclick("%UserProfile%\\Macotec\\Machines");
+constexpr action_t Rr_xclick("%UserProfile%\\Macotec\\Devel-Bcb");
 constexpr action_t Rr_wheelfwd("%UserProfile%\\Macotec\\Machines\\m32-Float");
 constexpr action_t Rr_wheelbck("%UserProfile%\\Macotec\\Machines\\m32-Strato");
 
