@@ -69,12 +69,13 @@ using action_t = std::basic_string_view<TCHAR>;
 // mouse-dwell: <tasks> (WIN+TAB)
 
 // [top-right]
-constexpr action_t Rtr_lclick("A:\\Apps\\DwordBuilder.exe");
-constexpr action_t Rtr_mclick(""); // A:\\Apps\\FileTypesMan.exe
+constexpr action_t Rtr_lclick("%windir%\\system32\\calc.exe");
+constexpr action_t Rtr_mclick("A:\\Apps\\DwordBuilder.exe"); // A:\\Apps\\FileTypesMan.exe
 constexpr action_t Rtr_rclick("");
 constexpr action_t Rtr_xclick("");
-constexpr action_t Rtr_wheelfwd("%windir%\\system32\\SnippingTool.exe");
-constexpr action_t Rtr_wheelbck("%windir%\\system32\\SnippingTool.exe");
+constexpr action_t Rtr_wheelfwd("");
+constexpr action_t Rtr_wheelbck("");
+// "%windir%\\system32\\SnippingTool.exe" Nah, use <winkey>+<shift>+S
 
 // [right]
 constexpr action_t Rr_lclick("%UserProfile%\\Macotec");
@@ -89,12 +90,12 @@ constexpr action_t Rl_lclick("%UserProfile%");
 constexpr action_t Rl_mclick("%UserProfile%\\Dev");
 constexpr action_t Rl_rclick(""); // %UserProfile%\\Bin
 constexpr action_t Rl_xclick("%UserProfile%\\Sys");
-constexpr action_t Rl_wheelfwd(""); // %UserProfile%\\Dev
-constexpr action_t Rl_wheelbck(""); // %UserProfile%\\Dev
+constexpr action_t Rl_wheelfwd("F:\\Activity\\m32-Float");
+constexpr action_t Rl_wheelbck("F:\\Activity\\m32-Strato");
 
 // [top]
-constexpr action_t Rt_lclick("%windir%\\system32\\calc.exe"); // /K \"cd %UserProfile%\"
-constexpr action_t Rt_mclick("%windir%\\system32\\charmap.exe");
+constexpr action_t Rt_lclick("%windir%\\system32\\charmap.exe"); // /K \"cd %UserProfile%\"
+constexpr action_t Rt_mclick("");
 constexpr action_t Rt_rclick("");
 constexpr action_t Rt_xclick("A:\\Apps\\FileTypesMan.exe");
 constexpr action_t Rt_wheelfwd("%SystemRoot%\\system32\\WindowsPowerShell\\v1.0\\powershell.exe"); // %HOMEDRIVE%%HOMEPATH%
