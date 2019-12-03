@@ -4,8 +4,9 @@
 
     OVERVIEW
     ---------------------------------------------
-    Installs a mouse hook to trigger actions
-    on certain mouse events.
+    Windows program that installs a mouse hook to
+    trigger actions on certain mouse events (ex.
+    click a screen zone).
     Inspired by: Tavis Ormandy <taviso@cmpxchg8b.com>
     https://github.com/taviso/hotcorner
 
@@ -16,7 +17,7 @@
 
     RELEASE HISTORY
     ---------------------------------------------
-    (2009-01) First draft
+    (2019-01) First draft
 
     LICENSES
     ---------------------------------------------
@@ -24,8 +25,8 @@
 
     USAGE:
     ---------------------------------------------
-    No configuration file, map the events in
-    'mouseHookCallback' function and compile
+    No configuration file, map the events down
+    below and recompile.
     Top left corner is fixed to "task manage"
 
                        [top]
@@ -36,17 +37,22 @@
                │                    │
                └────────────────────┘
     --------------------------------------------- */
+
+// MS Windows stuff
 #define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <shellapi.h> // 'ShellExecuteEx'
+#pragma comment(lib, "USER32")
+#pragma comment(linker, "/SUBSYSTEM:WINDOWS")
+// Note: On a '_WIN64' system, 'C:\Windows\System32\user32.dll' is a 64-bit library
+//       The 32-bit version is in 'C:\Windows\SysWOW64\user32.dll'
+
+
 // Standard C++ lib headers
 #include <string_view>
 #include <array>
 #include <cstdint> // 'int16_t'
-// MS Windows stuff
-#include <windows.h>
-#include <shellapi.h> // 'ShellExecuteEx'
 
-#pragma comment(lib, "USER32")
-#pragma comment(linker, "/SUBSYSTEM:WINDOWS")
 
 // Just a debug facility
 #ifdef _DEBUG
@@ -61,20 +67,29 @@
 constexpr LONG corner_size = 5; // [pix] Corner area size
 constexpr DWORD dwell_time = 300; // [ms] Cursor dwell time for auto-trigger
 
-// Actions to trigger: instead of reading from a config file,
-// with compile time data we should avoid needless tests
-using action_t = std::basic_string_view<TCHAR>;
+
+// Actions to trigger:
+// using hard-coded compile time data instead of a config file
+// Divide file path from arguments with '\n' character
+using strview = std::basic_string_view<TCHAR>;
+struct action_t
+   {
+    constexpr action_t(const strview& p) noexcept : pth(p) {} // args points to nullptr
+    constexpr action_t(const strview& p, const strview& a) noexcept : pth(p), args(a) {}
+    constexpr bool defined() const noexcept { return pth.size()>0; }
+    const strview pth, args;
+   };
 
 // [top-left]
 // mouse-dwell: <tasks> (WIN+TAB)
 
 // [top-right]
-constexpr action_t Rtr_lclick("%windir%\\system32\\calc.exe");
+constexpr action_t Rtr_lclick("%windir%\\system32\\calc.exe"); // c++2x uses operator""sv
 constexpr action_t Rtr_mclick("A:\\Apps\\DwordBuilder.exe"); // A:\\Apps\\FileTypesMan.exe
 constexpr action_t Rtr_rclick("");
 constexpr action_t Rtr_xclick("");
-constexpr action_t Rtr_wheelfwd("");
-constexpr action_t Rtr_wheelbck("");
+constexpr action_t Rtr_wheelfwd("%UserProfile%\\sys\\Enable realtime protection.lnk"); // ("powershell.exe","-command \"Set-MpPreference -DisableRealtimeMonitoring $false\"");
+constexpr action_t Rtr_wheelbck("%UserProfile%\\sys\\Disable realtime protection.lnk"); // ("powershell.exe","-command \"Set-MpPreference -DisableRealtimeMonitoring $true\"");
 // "%windir%\\system32\\SnippingTool.exe" Nah, use <winkey>+<shift>+S
 
 // [right]
@@ -98,8 +113,9 @@ constexpr action_t Rt_lclick("%windir%\\system32\\charmap.exe"); // /K \"cd %Use
 constexpr action_t Rt_mclick("");
 constexpr action_t Rt_rclick("");
 constexpr action_t Rt_xclick("A:\\Apps\\FileTypesMan.exe");
-constexpr action_t Rt_wheelfwd("%SystemRoot%\\system32\\WindowsPowerShell\\v1.0\\powershell.exe"); // %HOMEDRIVE%%HOMEPATH%
+constexpr action_t Rt_wheelfwd(/*"%SystemRoot%\\system32\\WindowsPowerShell\\v1.0\\"*/ "powershell.exe"); // %HOMEDRIVE%%HOMEPATH%
 constexpr action_t Rt_wheelbck("%windir%\\system32\\cmd.exe");  // /K \"cd %UserProfile%\"
+
 
 
 // Keyboard inputs
@@ -109,6 +125,17 @@ constexpr std::array<INPUT,4> inWinTab = {{// Win+Tab for task managing
                                             { INPUT_KEYBOARD, { VK_TAB,  KEYEVENTF_KEYUP } },
                                             { INPUT_KEYBOARD, { VK_LWIN, KEYEVENTF_KEYUP } }
                                          }};
+
+//---------------------------------------------------------------------------
+// Split a string_view, discarding the separator character
+//constexpr std::pair<strview,strview> split(const strview strv, const strview::value_type ch)
+//{
+//    static const strview::value_type empty_str[1] = { '\0' }; // Empty string
+//    const auto pos = strv.find_first_of(ch); // strview::size_type
+//    if( pos == std::string_view::npos ) return std::make_pair(strv, empty_str);
+//    return std::make_pair(strv.substr(0, pos), strv.substr(pos+1, strv.size()-pos-1));
+//}
+
 
 //---------------------------------------------------------------------------
 inline bool in_rect(const RECT& r, const POINT& p) noexcept
@@ -121,9 +148,7 @@ inline bool in_rect(const RECT& r, const POINT& p) noexcept
 // Extract high word as signed
 inline int16_t hi_word(const DWORD dw) noexcept
    {
-    //#if sizeof(int16_t)!=2
-    //    #error "what?? int16_t is not 2 bytes??"
-    //#endif
+    static_assert( sizeof(int16_t)==2, "what?? int16_t is not 2 bytes??" );
     return int16_t((dw>>16) & 0xFFFF);
    }
 
@@ -135,11 +160,10 @@ inline bool msb(const BYTE b) noexcept { return (b & 0x80); }
 
 //---------------------------------------------------------------------------
 // Start a program/Open file (without wait)
-void shell_exec(LPCTSTR pth) noexcept
+void shell_exec(LPCTSTR pth, LPCTSTR args =NULL) noexcept
 {
     // Expand possible environmental variables
     std::array<TCHAR,MAX_PATH> buf;
-    // Note: cls_DynArray always allocates a hidden null element in the end
     DWORD len = ::ExpandEnvironmentStrings(pth, buf.data(), (DWORD) buf.size());
 
     SHELLEXECUTEINFO ShExecInfo = {0};
@@ -148,7 +172,7 @@ void shell_exec(LPCTSTR pth) noexcept
     ShExecInfo.hwnd = NULL;
     ShExecInfo.lpVerb = NULL; // NULL=="open"
     ShExecInfo.lpFile = buf.data(); // TCHAR[MAX_PATH]
-    ShExecInfo.lpParameters = NULL;
+    ShExecInfo.lpParameters = args;
     ShExecInfo.lpDirectory = NULL;
     ShExecInfo.nShow = SW_SHOWNORMAL; // SW_SHOW, SW_SHOWNA
     ShExecInfo.hInstApp = NULL;
@@ -179,6 +203,12 @@ void shell_exec(LPCTSTR pth) noexcept
     //       }
     //   }
 } // 'shell_exec'
+//---------------------------------------------------------------------------
+// Invoking facility
+inline void shell_exec(const action_t& act) noexcept
+{
+    shell_exec(act.pth.data(), act.args.data() );
+}
 
 
 //---------------------------------------------------------------------------
@@ -247,32 +277,6 @@ void set_zones(const LONG siz) noexcept
     Rt.bottom = Rscreen.top + 1;
 } // 'set_zones'
 
-
-
-//#include <windows.h>
-//#include <gdiplus.h>
-//#include <stdio.h>
-//using namespace Gdiplus;
-//
-//void draw()
-//{
-//   // start up GDI+ -- only need to do this once per process at startup
-//   GdiplusStartupInput gdiplusStartupInput;
-//   ULONG_PTR gdiplusToken;
-//   GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
-//
-//
-//   Rect rect(20,20,50,50);
-//   Graphics grpx(dc);
-//   Image* image = new Image(L"SomePhoto.png");
-//   grpx.DrawImage(Img,rect);
-//
-//   delete image;
-//
-//   // shut down - only once per process
-//   GdiplusShutdown(gdiplusToken);
-//   return;
-//}
 
 
 //---------------------------------------------------------------------------
@@ -355,56 +359,57 @@ static LRESULT CALLBACK mouseHookCallback(int nCode, WPARAM wParam, LPARAM lPara
     else
        {// 'Other mouse event'
         //EVTLOG("WM_?? 0x" << std::hex << wParam)
-        
+
         // Compile-time facilities: this should avoid needless tests
-        constexpr bool Rtr_has_wheel_actions = Rtr_wheelfwd.size()>0 && Rtr_wheelbck.size()>0;
-        constexpr bool Rtr_has_actions = Rtr_lclick.size()>0 || Rtr_mclick.size()>0 || Rtr_rclick.size()>0 || Rtr_xclick.size()>0 || Rtr_has_wheel_actions;
-        constexpr bool Rr_has_wheel_actions = Rr_wheelfwd.size()>0 && Rr_wheelbck.size()>0;
-        constexpr bool Rr_has_actions = Rr_lclick.size()>0 || Rr_mclick.size()>0 || Rr_rclick.size()>0 || Rr_xclick.size()>0 || Rr_has_wheel_actions;
-        constexpr bool Rl_has_wheel_actions = Rl_wheelfwd.size()>0 && Rl_wheelbck.size()>0;
-        constexpr bool Rl_has_actions = Rl_lclick.size()>0 || Rl_mclick.size()>0 || Rl_rclick.size()>0 || Rl_xclick.size()>0 || Rl_has_wheel_actions;
-        constexpr bool Rt_has_wheel_actions = Rt_wheelfwd.size()>0 && Rt_wheelbck.size()>0;
-        constexpr bool Rt_has_actions = Rt_lclick.size()>0 || Rt_mclick.size()>0 || Rt_rclick.size()>0 || Rt_xclick.size()>0 || Rt_has_wheel_actions;
+        constexpr bool Rtr_has_wheel_actions = Rtr_wheelfwd.defined() && Rtr_wheelbck.defined();
+        constexpr bool Rtr_has_actions = Rtr_lclick.defined() || Rtr_mclick.defined() || Rtr_rclick.defined() || Rtr_xclick.defined() || Rtr_has_wheel_actions;
+        constexpr bool Rr_has_wheel_actions = Rr_wheelfwd.defined() && Rr_wheelbck.defined();
+        constexpr bool Rr_has_actions = Rr_lclick.defined() || Rr_mclick.defined() || Rr_rclick.defined() || Rr_xclick.defined() || Rr_has_wheel_actions;
+        constexpr bool Rl_has_wheel_actions = Rl_wheelfwd.defined() && Rl_wheelbck.defined();
+        constexpr bool Rl_has_actions = Rl_lclick.defined() || Rl_mclick.defined() || Rl_rclick.defined() || Rl_xclick.defined() || Rl_has_wheel_actions;
+        constexpr bool Rt_has_wheel_actions = Rt_wheelfwd.defined() && Rt_wheelbck.defined();
+        constexpr bool Rt_has_actions = Rt_lclick.defined() || Rt_mclick.defined() || Rt_rclick.defined() || Rt_xclick.defined() || Rt_has_wheel_actions;
+
 
         // ----------------------------- "top right" zone
         if( Rtr_has_actions && in_rect(Rtr, evt->pt) )
            {
             // 'Left click'
-            if( Rtr_lclick.size()>0 && wParam==WM_LBUTTONDOWN )
+            if( Rtr_lclick.defined() && wParam==WM_LBUTTONDOWN )
                {
                 EVTLOG("Left click in top right corner " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( Rtr_lclick.data() );
+                shell_exec( Rtr_lclick );
                }
             // 'Right click'
-            else if( Rtr_rclick.size()>0 && wParam==WM_RBUTTONDOWN )
+            else if( Rtr_rclick.defined() && wParam==WM_RBUTTONDOWN )
                {
                 EVTLOG("Right click in top right corner " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( Rtr_rclick.data() );
+                shell_exec( Rtr_rclick );
                }
             // 'Middle click'
-            else if( Rtr_mclick.size()>0 && wParam==WM_MBUTTONDOWN )
+            else if( Rtr_mclick.defined() && wParam==WM_MBUTTONDOWN )
                {
                 EVTLOG("Middle click in top right corner " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( Rtr_mclick.data() );
+                shell_exec( Rtr_mclick );
                }
             // 'eXpansion button click'
-            else if( Rtr_xclick.size()>0 && wParam==WM_XBUTTONDOWN )
+            else if( Rtr_xclick.defined() && wParam==WM_XBUTTONDOWN )
                {
                 EVTLOG("X click in top right corner " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( Rtr_xclick.data() );
+                shell_exec( Rtr_xclick );
                }
             // 'Mouse wheel'
             else if( Rtr_has_wheel_actions && wParam==WM_MOUSEWHEEL )
                {
-                if( Rtr_wheelfwd.size()>0 && hi_word(evt->mouseData)>0 )
+                if( Rtr_wheelfwd.defined() && hi_word(evt->mouseData)>0 )
                    {
                     EVTLOG("Fwd Wheel in top right corner " << hi_word(evt->mouseData))
-                    shell_exec( Rtr_wheelfwd.data() );
+                    shell_exec( Rtr_wheelfwd );
                    }
-                else if( Rtr_wheelbck.size() && hi_word(evt->mouseData)<0 )
+                else if( Rtr_wheelbck.defined() && hi_word(evt->mouseData)<0 )
                    {
                     EVTLOG("Bck Wheel in top right corner " << hi_word(evt->mouseData))
-                    shell_exec( Rtr_wheelbck.data() );
+                    shell_exec( Rtr_wheelbck );
                    }
                }
            } // "top right" zone
@@ -413,41 +418,41 @@ static LRESULT CALLBACK mouseHookCallback(int nCode, WPARAM wParam, LPARAM lPara
         else if( Rr_has_actions && in_rect(Rr, evt->pt) )
            {
             // 'Left click'
-            if( Rr_lclick.size()>0 && wParam==WM_LBUTTONDOWN )
+            if( Rr_lclick.defined() && wParam==WM_LBUTTONDOWN )
                {
                 EVTLOG("Left click in right band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( Rr_lclick.data() );
+                shell_exec( Rr_lclick );
                }
             // 'Right click'
-            else if( Rr_rclick.size()>0 && wParam==WM_RBUTTONDOWN )
+            else if( Rr_rclick.defined() && wParam==WM_RBUTTONDOWN )
                {
                 EVTLOG("Right click in right band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( Rr_rclick.data() );
+                shell_exec( Rr_rclick );
                }
             // 'Middle click'
-            else if( Rr_mclick.size()>0 && wParam==WM_MBUTTONDOWN )
+            else if( Rr_mclick.defined() && wParam==WM_MBUTTONDOWN )
                {
                 EVTLOG("Middle click in right band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( Rr_mclick.data() );
+                shell_exec( Rr_mclick );
                }
             // 'eXpansion button click'
-            else if( Rr_xclick.size()>0 && wParam==WM_XBUTTONDOWN )
+            else if( Rr_xclick.defined() && wParam==WM_XBUTTONDOWN )
                {
                 EVTLOG("X click in right band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( Rr_xclick.data() );
+                shell_exec( Rr_xclick );
                }
             // 'Mouse wheel'
             else if( Rr_has_wheel_actions && wParam==WM_MOUSEWHEEL )
                {
-                if( Rr_wheelfwd.size()>0 && hi_word(evt->mouseData)>0 )
+                if( Rr_wheelfwd.defined() && hi_word(evt->mouseData)>0 )
                    {
                     EVTLOG("Fwd Wheel in right band " << hi_word(evt->mouseData))
-                    shell_exec( Rr_wheelfwd.data() );
+                    shell_exec( Rr_wheelfwd );
                    }
-                else if( Rr_wheelbck.size() && hi_word(evt->mouseData)<0 )
+                else if( Rr_wheelbck.defined() && hi_word(evt->mouseData)<0 )
                    {
                     EVTLOG("Bck Wheel in right band " << hi_word(evt->mouseData))
-                    shell_exec( Rr_wheelbck.data() );
+                    shell_exec( Rr_wheelbck );
                    }
                }
            } // "right band" zone
@@ -456,41 +461,41 @@ static LRESULT CALLBACK mouseHookCallback(int nCode, WPARAM wParam, LPARAM lPara
         else if( Rl_has_actions && in_rect(Rl, evt->pt) )
            {
             // 'Left click'
-            if( Rl_lclick.size()>0 && wParam==WM_LBUTTONDOWN )
+            if( Rl_lclick.defined() && wParam==WM_LBUTTONDOWN )
                {
                 EVTLOG("Left click in left band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( Rl_lclick.data() );
+                shell_exec( Rl_lclick );
                }
             // 'Right click'
-            else if( Rl_rclick.size()>0 && wParam==WM_RBUTTONDOWN )
+            else if( Rl_rclick.defined() && wParam==WM_RBUTTONDOWN )
                {
                 EVTLOG("Right click in left band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( Rl_rclick.data() );
+                shell_exec( Rl_rclick );
                }
             // 'Middle click'
-            else if( Rl_mclick.size()>0 && wParam==WM_MBUTTONDOWN )
+            else if( Rl_mclick.defined() && wParam==WM_MBUTTONDOWN )
                {
                 EVTLOG("Middle click in left band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( Rl_mclick.data() );
+                shell_exec( Rl_mclick );
                }
             // 'eXpansion button click'
-            else if( Rl_xclick.size()>0 && wParam==WM_XBUTTONDOWN )
+            else if( Rl_xclick.defined() && wParam==WM_XBUTTONDOWN )
                {
                 EVTLOG("X click in left band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( Rl_xclick.data() );
+                shell_exec( Rl_xclick );
                }
             // 'Mouse wheel'
             else if( Rl_has_wheel_actions && wParam==WM_MOUSEWHEEL )
                {
-                if( Rl_wheelfwd.size()>0 && hi_word(evt->mouseData)>0 )
+                if( Rl_wheelfwd.defined() && hi_word(evt->mouseData)>0 )
                    {
                     EVTLOG("Fwd Wheel in left band " << hi_word(evt->mouseData))
-                    shell_exec( Rl_wheelfwd.data() );
+                    shell_exec( Rl_wheelfwd );
                    }
-                else if( Rl_wheelbck.size() && hi_word(evt->mouseData)<0 )
+                else if( Rl_wheelbck.defined() && hi_word(evt->mouseData)<0 )
                    {
                     EVTLOG("Bck Wheel in left band " << hi_word(evt->mouseData))
-                    shell_exec( Rl_wheelbck.data() );
+                    shell_exec( Rl_wheelbck );
                    }
                }
            } // "left band" zone
@@ -499,41 +504,41 @@ static LRESULT CALLBACK mouseHookCallback(int nCode, WPARAM wParam, LPARAM lPara
         else if( Rt_has_actions && in_rect(Rt, evt->pt) )
            {
             // 'Left click'
-            if( Rt_lclick.size()>0 && wParam==WM_LBUTTONDOWN )
+            if( Rt_lclick.defined() && wParam==WM_LBUTTONDOWN )
                {
                 EVTLOG("Left click in top band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( Rt_lclick.data() );
+                shell_exec( Rt_lclick );
                }
             // 'Right click'
-            else if( Rt_rclick.size()>0 && wParam==WM_RBUTTONDOWN )
+            else if( Rt_rclick.defined() && wParam==WM_RBUTTONDOWN )
                {
                 EVTLOG("Right click in top band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( Rt_rclick.data() );
+                shell_exec( Rt_rclick );
                }
             // 'Middle click'
-            else if( Rt_mclick.size()>0 && wParam==WM_MBUTTONDOWN )
+            else if( Rt_mclick.defined() && wParam==WM_MBUTTONDOWN )
                {
                 EVTLOG("Middle click in top band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( Rt_mclick.data() );
+                shell_exec( Rt_mclick );
                }
             // 'eXpansion button click'
-            else if( Rt_xclick.size()>0 && wParam==WM_XBUTTONDOWN )
+            else if( Rt_xclick.defined() && wParam==WM_XBUTTONDOWN )
                {
                 EVTLOG("X click in top band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( Rt_xclick.data() );
+                shell_exec( Rt_xclick );
                }
             // 'Mouse wheel'
             else if( Rt_has_wheel_actions && wParam==WM_MOUSEWHEEL )
                {
-                if( Rt_wheelfwd.size()>0 && hi_word(evt->mouseData)>0 )
+                if( Rt_wheelfwd.defined() && hi_word(evt->mouseData)>0 )
                    {
                     EVTLOG("Fwd Wheel in top band " << hi_word(evt->mouseData))
-                    shell_exec( Rt_wheelfwd.data() );
+                    shell_exec( Rt_wheelfwd );
                    }
-                else if( Rt_wheelbck.size() && hi_word(evt->mouseData)<0 )
+                else if( Rt_wheelbck.defined() && hi_word(evt->mouseData)<0 )
                    {
                     EVTLOG("Bck Wheel in top band " << hi_word(evt->mouseData))
-                    shell_exec( Rt_wheelbck.data() );
+                    shell_exec( Rt_wheelbck );
                    }
                }
            } // "top band" zone
@@ -576,3 +581,30 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
     ::UnhookWindowsHookEx(mouse_hook);
     return 0;
 } // 'WinMain'
+
+
+
+//#include <windows.h>
+//#include <gdiplus.h>
+//#include <stdio.h>
+//using namespace Gdiplus;
+//
+//void draw()
+//{
+//   // start up GDI+ -- only need to do this once per process at startup
+//   GdiplusStartupInput gdiplusStartupInput;
+//   ULONG_PTR gdiplusToken;
+//   GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
+//
+//
+//   Rect rect(20,20,50,50);
+//   Graphics grpx(dc);
+//   Image* image = new Image(L"SomePhoto.png");
+//   grpx.DrawImage(Img,rect);
+//
+//   delete image;
+//
+//   // shut down - only once per process
+//   GdiplusShutdown(gdiplusToken);
+//   return;
+//}

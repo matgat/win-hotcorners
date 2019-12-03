@@ -1,4 +1,4 @@
-# [win-hotcorners](https://matgat@bitbucket.org/matgat/win-hotcorners)
+# [win-hotcorners](https://github.com/matgat/win-hotcorners.git)
 
 A rigid, spartan and light program, supposed to run in background, to add hotcorners functionality to windows 10, inspired by [Tavis Ormandy](mailto:taviso@cmpxchg8b.com)'s [*hotcorner*](https://github.com/taviso/hotcorner)
 
