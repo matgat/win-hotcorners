@@ -12,8 +12,7 @@
 
     BUILD
     ---------------------------------------------
-    MSVC2017: /O2 /std:c++17
-    gcc: -O3 -std=c++17
+    MSVC2017: /O2 /std:c++latest
 
     RELEASE HISTORY
     ---------------------------------------------
@@ -84,37 +83,37 @@ struct action_t
 // mouse-dwell: <tasks> (WIN+TAB)
 
 // [top-right]
-constexpr action_t Rtr_lclick("%windir%\\system32\\calc.exe"); // c++2x uses operator""sv
-constexpr action_t Rtr_mclick("A:\\Apps\\DwordBuilder.exe"); // A:\\Apps\\FileTypesMan.exe
+constexpr action_t Rtr_lclick("%UserProfile%\\sys\\corner-actions\\tr-left-click.lnk");
+constexpr action_t Rtr_mclick("%UserProfile%\\sys\\corner-actions\\tr-middle-click.lnk");
 constexpr action_t Rtr_rclick("");
 constexpr action_t Rtr_xclick("");
-constexpr action_t Rtr_wheelfwd("%UserProfile%\\sys\\Enable realtime protection.lnk"); // ("powershell.exe","-command \"Set-MpPreference -DisableRealtimeMonitoring $false\"");
-constexpr action_t Rtr_wheelbck("%UserProfile%\\sys\\Disable realtime protection.lnk"); // ("powershell.exe","-command \"Set-MpPreference -DisableRealtimeMonitoring $true\"");
+constexpr action_t Rtr_wheelfwd("%UserProfile%\\sys\\corner-actions\\tr-wheel-up.lnk"); // ("powershell.exe","-command \"Set-MpPreference -DisableRealtimeMonitoring $false\"");
+constexpr action_t Rtr_wheelbck("%UserProfile%\\sys\\corner-actions\\tr-wheel-down.lnk"); // ("powershell.exe","-command \"Set-MpPreference -DisableRealtimeMonitoring $true\"");
 // "%windir%\\system32\\SnippingTool.exe" Nah, use <winkey>+<shift>+S
 
 // [right]
-constexpr action_t Rr_lclick("%UserProfile%\\Macotec");
-constexpr action_t Rr_mclick("%UserProfile%\\Macotec\\Machines");
-constexpr action_t Rr_rclick("%UserProfile%\\Macotec\\Macotec-Documents");
-constexpr action_t Rr_xclick("%UserProfile%\\Macotec\\Devel-Bcb");
-constexpr action_t Rr_wheelfwd("%UserProfile%\\Macotec\\Machines\\m32-Float");
-constexpr action_t Rr_wheelbck("%UserProfile%\\Macotec\\Machines\\m32-Strato");
+constexpr action_t Rr_lclick("%UserProfile%\\sys\\corner-actions\\l-left-click.lnk");
+constexpr action_t Rr_mclick("%UserProfile%\\sys\\corner-actions\\l-middle-click.lnk");
+constexpr action_t Rr_rclick("%UserProfile%\\sys\\corner-actions\\l-right-click.lnk");
+constexpr action_t Rr_xclick("%UserProfile%\\sys\\corner-actions\\l-x-click.lnk");
+constexpr action_t Rr_wheelfwd("%UserProfile%\\sys\\corner-actions\\l-wheel-up.lnk");
+constexpr action_t Rr_wheelbck("%UserProfile%\\sys\\corner-actions\\l-wheel-down.lnk");
 
 // [left]
-constexpr action_t Rl_lclick("%UserProfile%");
-constexpr action_t Rl_mclick("%UserProfile%\\Dev");
-constexpr action_t Rl_rclick(""); // %UserProfile%\\Bin
-constexpr action_t Rl_xclick("%UserProfile%\\Sys");
-constexpr action_t Rl_wheelfwd("F:\\Activity\\m32-Float");
-constexpr action_t Rl_wheelbck("F:\\Activity\\m32-Strato");
+constexpr action_t Rl_lclick("%UserProfile%\\sys\\corner-actions\\l-left-click.lnk");
+constexpr action_t Rl_mclick("%UserProfile%\\sys\\corner-actions\\l-middle-click.lnk");
+constexpr action_t Rl_rclick("");
+constexpr action_t Rl_xclick("%UserProfile%\\sys\\corner-actions\\l-x-click.lnk");
+constexpr action_t Rl_wheelfwd("%UserProfile%\\sys\\corner-actions\\tr-wheel-up.lnk");
+constexpr action_t Rl_wheelbck("%UserProfile%\\sys\\corner-actions\\tr-wheel-down.lnk");
 
 // [top]
-constexpr action_t Rt_lclick("%windir%\\system32\\charmap.exe"); // /K \"cd %UserProfile%\"
+constexpr action_t Rt_lclick("%UserProfile%\\sys\\corner-actions\\t-left-click.lnk");
 constexpr action_t Rt_mclick("");
 constexpr action_t Rt_rclick("");
-constexpr action_t Rt_xclick("A:\\Apps\\FileTypesMan.exe");
-constexpr action_t Rt_wheelfwd(/*"%SystemRoot%\\system32\\WindowsPowerShell\\v1.0\\"*/ "powershell.exe"); // %HOMEDRIVE%%HOMEPATH%
-constexpr action_t Rt_wheelbck("%windir%\\system32\\cmd.exe");  // /K \"cd %UserProfile%\"
+constexpr action_t Rt_xclick("%UserProfile%\\sys\\corner-actions\\t-x-click.lnk");
+constexpr action_t Rt_wheelfwd("%UserProfile%\\sys\\corner-actions\\t-wheel-up.lnk");
+constexpr action_t Rt_wheelbck("%UserProfile%\\sys\\corner-actions\\t-wheel-down.lnk");
 
 
 
