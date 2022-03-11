@@ -92,24 +92,24 @@ constexpr action_t Rtr_wheelbck("%UserProfile%\\sys\\corner-actions\\tr-wheel-do
 // "%windir%\\system32\\SnippingTool.exe" Nah, use <winkey>+<shift>+S
 
 // [right]
-constexpr action_t Rr_lclick("%UserProfile%\\sys\\corner-actions\\l-left-click.lnk");
-constexpr action_t Rr_mclick("%UserProfile%\\sys\\corner-actions\\l-middle-click.lnk");
-constexpr action_t Rr_rclick("%UserProfile%\\sys\\corner-actions\\l-right-click.lnk");
-constexpr action_t Rr_xclick("%UserProfile%\\sys\\corner-actions\\l-x-click.lnk");
-constexpr action_t Rr_wheelfwd("%UserProfile%\\sys\\corner-actions\\l-wheel-up.lnk");
-constexpr action_t Rr_wheelbck("%UserProfile%\\sys\\corner-actions\\l-wheel-down.lnk");
+constexpr action_t Rr_lclick("%UserProfile%\\sys\\corner-actions\\r-left-click.lnk");
+constexpr action_t Rr_mclick("%UserProfile%\\sys\\corner-actions\\r-middle-click.lnk");
+constexpr action_t Rr_rclick("%UserProfile%\\sys\\corner-actions\\r-right-click.lnk");
+constexpr action_t Rr_xclick("%UserProfile%\\sys\\corner-actions\\r-x-click.lnk");
+constexpr action_t Rr_wheelfwd("%UserProfile%\\sys\\corner-actions\\r-wheel-up.lnk");
+constexpr action_t Rr_wheelbck("%UserProfile%\\sys\\corner-actions\\r-wheel-down.lnk");
 
 // [left]
 constexpr action_t Rl_lclick("%UserProfile%\\sys\\corner-actions\\l-left-click.lnk");
 constexpr action_t Rl_mclick("%UserProfile%\\sys\\corner-actions\\l-middle-click.lnk");
 constexpr action_t Rl_rclick("");
 constexpr action_t Rl_xclick("%UserProfile%\\sys\\corner-actions\\l-x-click.lnk");
-constexpr action_t Rl_wheelfwd("%UserProfile%\\sys\\corner-actions\\tr-wheel-up.lnk");
-constexpr action_t Rl_wheelbck("%UserProfile%\\sys\\corner-actions\\tr-wheel-down.lnk");
+constexpr action_t Rl_wheelfwd("%UserProfile%\\sys\\corner-actions\\l-wheel-up.lnk");
+constexpr action_t Rl_wheelbck("%UserProfile%\\sys\\corner-actions\\l-wheel-down.lnk");
 
 // [top]
 constexpr action_t Rt_lclick("%UserProfile%\\sys\\corner-actions\\t-left-click.lnk");
-constexpr action_t Rt_mclick("");
+constexpr action_t Rt_mclick("%UserProfile%\\sys\\corner-actions\\t-middle-click.lnk");
 constexpr action_t Rt_rclick("");
 constexpr action_t Rt_xclick("%UserProfile%\\sys\\corner-actions\\t-x-click.lnk");
 constexpr action_t Rt_wheelfwd("%UserProfile%\\sys\\corner-actions\\t-wheel-up.lnk");
