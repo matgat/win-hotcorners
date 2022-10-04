@@ -17,6 +17,7 @@ Makefile.Debug
 Makefile.Release
 
 # [msvc]
+.vs/
 *.exe.recipe
 *.iobj
 *.tlog
@@ -26,9 +27,7 @@ Makefile.Release
 *.ilk
 *.suo
 *.VC.db
+*.db-*
+*.opendb
 *.filters
 *.user
-
-# [specific]
-*.pll
-*.plclib
