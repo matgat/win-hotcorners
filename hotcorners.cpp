@@ -1,572 +1,458 @@
-/*  ---------------------------------------------
-    hotcorners.cpp
-    ©2019 matteo.gattanini@gmail.com
-
-    OVERVIEW
-    ---------------------------------------------
-    Windows program that installs a mouse hook to
-    trigger actions on certain mouse events (ex.
-    click a screen zone).
-    Inspired by: Tavis Ormandy <taviso@cmpxchg8b.com>
-    https://github.com/taviso/hotcorner
-
-    BUILD
-    ---------------------------------------------
-    MSVC2017: /O2 /std:c++latest
-
-    RELEASE HISTORY
-    ---------------------------------------------
-    (2019-01) First draft
-
-    LICENSES
-    ---------------------------------------------
-    Use and modify freely
-
-    USAGE:
-    ---------------------------------------------
-    No configuration file, map the events down
-    below and recompile.
-    Top left corner is fixed to "task manage"
-
-                       [top]
-    [top-left] ┌─┬────════════────┬─┐ [top-right]
-               ├─┘                └─┤
-               ║                    ║
-       [left]  ║                    ║ [right]
-               │                    │
-               └────────────────────┘
-    --------------------------------------------- */
+//  ---------------------------------------------
+//  Windows program that installs a mouse hook to
+//  trigger actions on certain mouse events
+//  (ex. click a screen zone).
+//  Inspired by: Tavis Ormandy <taviso@cmpxchg8b.com>
+//  https://github.com/taviso/hotcorner
+//  ---------------------------------------------
+//  No configuration file, map the events with
+//  links in %UserProfile%\sys\corner-actions
+//  Top left corner is fixed to "task manage"
+//  ---------------------------------------------
+//                   [top]
+//  [top-left] ┌─┬──════════──┬─┐ [top-right]
+//             ├─┘            └─┤
+//             ║                ║
+//      [left] ║                ║ [right]
+//             └────────────────┘
+//  ---------------------------------------------
+//  Settings
+constexpr int corner_size = 5; // [pix] Corner area size
+constexpr unsigned int dwell_time = 300; // [ms] Cursor dwell time for auto-trigger
+#define ACTIONS_FOLDER "C:\\Users\\user\\sys\\corner-actions\\"
+//  ---------------------------------------------
 
 // MS Windows stuff
-#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#include <shellapi.h> // 'ShellExecuteEx'
-#pragma comment(lib, "USER32")
-#pragma comment(linker, "/SUBSYSTEM:WINDOWS")
+    // DWORD, RECT, POINT, LPVOID, LPSTR, HINSTANCE, ...
+    // HANDLE, INVALID_HANDLE_VALUE, CloseHandle, CreateThread, TerminateThread
+    // GetSystemMetrics, SM_CXSCREEN
+    // HHOOK, MSLLHOOKSTRUCT, SetWindowsHookEx, CallNextHookEx, UnhookWindowsHookEx
+    // MSG, LRESULT, CALLBACK, WPARAM, LPARAM, GetMessage, DispatchMessage, ...
+    // WM_LBUTTONDOWN, ...
+    // BYTE, GetKeyboardState, GetCursorPos, SendInput
+#include <shellapi.h> // ShellExecuteEx, SHELLEXECUTEINFO
+//#pragma comment(lib, "USER32")
+//#pragma comment(linker, "/SUBSYSTEM:WINDOWS")
 // Note: On a '_WIN64' system, 'C:\Windows\System32\user32.dll' is a 64-bit library
 //       The 32-bit version is in 'C:\Windows\SysWOW64\user32.dll'
 
-
-// Standard C++ lib headers
-#include <string_view>
-#include <array>
-#include <cstdint> // 'int16_t'
+#include <array> // std::array
+#include <cstdint> // std::int16_t
 
 
-// Just a debug facility
-#ifdef _DEBUG
-  #include <sstream>
-  #define EVTLOG(msg) { std::wstringstream ss; ss << msg << '\n'; OutputDebugStringW(ss.str().c_str()); }
-#else
-  #define EVTLOG(x) ;
-#endif
+    // Debug facility
+  #ifdef _DEBUG
+    #include <format> // std::format
+    #define EVTLOG(s,...) ::OutputDebugString(std::format(s "\n",__VA_ARGS__).c_str());
+  #else
+    #define EVTLOG(...)
+  #endif
 
 
-// Settings
-constexpr LONG corner_size = 5; // [pix] Corner area size
-constexpr DWORD dwell_time = 300; // [ms] Cursor dwell time for auto-trigger
-
-
-// Actions to trigger:
-// using hard-coded compile time data instead of a config file
-// Divide file path from arguments with '\n' character
-using strview = std::basic_string_view<TCHAR>;
-struct action_t
+/////////////////////////////////////////////////////////////////////////////
+// My own mouse events ids for wheel-up and wheel-down
+enum class mouse_event_t : char
    {
-    constexpr action_t(const strview& p) noexcept : pth(p) {} // args points to nullptr
-    constexpr action_t(const strview& p, const strview& a) noexcept : pth(p), args(a) {}
-    constexpr bool defined() const noexcept { return pth.size()>0; }
-    const strview pth, args;
+    left_button     = 'l',
+    right_button    = 'r',
+    middle_button   = 'm',
+    extended_button = 'x',
+    wheel_up        = '<',
+    wheel_down      = '>',
+    unknown         = '\0'
    };
 
-// [top-left]
-// mouse-dwell: <tasks> (WIN+TAB)
+//---------------------------------------------------------------------------
+constexpr mouse_event_t get_event_id(const WPARAM win_mouse_event_id, const DWORD add_data) noexcept
+{
+    struct local
+       {// Extract high word as signed
+        [[nodiscard]] static inline constexpr std::int16_t hi_word(const DWORD dw) noexcept
+           {
+            static_assert( sizeof(std::int16_t)==2 );
+            return std::int16_t((dw>>16) & 0xFFFF);
+           }
+       };
 
-// [top-right]
-constexpr action_t Rtr_lclick("%UserProfile%\\sys\\corner-actions\\tr-left-click.lnk");
-constexpr action_t Rtr_mclick("%UserProfile%\\sys\\corner-actions\\tr-middle-click.lnk");
-constexpr action_t Rtr_rclick("");
-constexpr action_t Rtr_xclick("");
-constexpr action_t Rtr_wheelfwd("%UserProfile%\\sys\\corner-actions\\tr-wheel-up.lnk"); // ("powershell.exe","-command \"Set-MpPreference -DisableRealtimeMonitoring $false\"");
-constexpr action_t Rtr_wheelbck("%UserProfile%\\sys\\corner-actions\\tr-wheel-down.lnk"); // ("powershell.exe","-command \"Set-MpPreference -DisableRealtimeMonitoring $true\"");
-// "%windir%\\system32\\SnippingTool.exe" Nah, use <winkey>+<shift>+S
-
-// [right]
-constexpr action_t Rr_lclick("%UserProfile%\\sys\\corner-actions\\r-left-click.lnk");
-constexpr action_t Rr_mclick("%UserProfile%\\sys\\corner-actions\\r-middle-click.lnk");
-constexpr action_t Rr_rclick("%UserProfile%\\sys\\corner-actions\\r-right-click.lnk");
-constexpr action_t Rr_xclick("%UserProfile%\\sys\\corner-actions\\r-x-click.lnk");
-constexpr action_t Rr_wheelfwd("%UserProfile%\\sys\\corner-actions\\r-wheel-up.lnk");
-constexpr action_t Rr_wheelbck("%UserProfile%\\sys\\corner-actions\\r-wheel-down.lnk");
-
-// [left]
-constexpr action_t Rl_lclick("%UserProfile%\\sys\\corner-actions\\l-left-click.lnk");
-constexpr action_t Rl_mclick("%UserProfile%\\sys\\corner-actions\\l-middle-click.lnk");
-constexpr action_t Rl_rclick("");
-constexpr action_t Rl_xclick("%UserProfile%\\sys\\corner-actions\\l-x-click.lnk");
-constexpr action_t Rl_wheelfwd("%UserProfile%\\sys\\corner-actions\\l-wheel-up.lnk");
-constexpr action_t Rl_wheelbck("%UserProfile%\\sys\\corner-actions\\l-wheel-down.lnk");
-
-// [top]
-constexpr action_t Rt_lclick("%UserProfile%\\sys\\corner-actions\\t-left-click.lnk");
-constexpr action_t Rt_mclick("%UserProfile%\\sys\\corner-actions\\t-middle-click.lnk");
-constexpr action_t Rt_rclick("");
-constexpr action_t Rt_xclick("%UserProfile%\\sys\\corner-actions\\t-x-click.lnk");
-constexpr action_t Rt_wheelfwd("%UserProfile%\\sys\\corner-actions\\t-wheel-up.lnk");
-constexpr action_t Rt_wheelbck("%UserProfile%\\sys\\corner-actions\\t-wheel-down.lnk");
+    switch( win_mouse_event_id )
+       {
+        case WM_LBUTTONDOWN: return mouse_event_t::left_button;
+        case WM_RBUTTONDOWN: return mouse_event_t::right_button;
+        case WM_MBUTTONDOWN: return mouse_event_t::middle_button;
+        case WM_XBUTTONDOWN: return mouse_event_t::extended_button;
+        case WM_MOUSEWHEEL:  return local::hi_word(add_data)>0 ? mouse_event_t::wheel_up
+                                                               : mouse_event_t::wheel_down;
+        default: return mouse_event_t::unknown;
+       }
+}
 
 
+/////////////////////////////////////////////////////////////////////////////
+class action_t final
+{
+ private:
+    const char* m_command;
 
-// Keyboard inputs
-constexpr std::array<INPUT,4> inWinTab = {{// Win+Tab for task managing
-                                            { INPUT_KEYBOARD, { VK_LWIN, 0 } },
-                                            { INPUT_KEYBOARD, { VK_TAB,  0 } },
-                                            { INPUT_KEYBOARD, { VK_TAB,  KEYEVENTF_KEYUP } },
-                                            { INPUT_KEYBOARD, { VK_LWIN, KEYEVENTF_KEYUP } }
-                                         }};
+ public:
+
+    constexpr action_t(const char* const cstr =nullptr) noexcept
+      : m_command(cstr)
+       {}
+
+    [[nodiscard]] constexpr bool is_defined() const noexcept { return m_command!=nullptr; }
+
+    //---------------------------------------------------------------------------
+    void execute() const noexcept
+       {
+        if( is_defined() )
+           {
+            //std::array<char,MAX_PATH> buf;
+            //const DWORD len = ::ExpandEnvironmentStrings(m_command, buf.data(), buf.size());
+            SHELLEXECUTEINFO ShExecInfo = {0};
+            ShExecInfo.cbSize = sizeof(SHELLEXECUTEINFO);
+            ShExecInfo.fMask = 0; /* SEE_MASK_DEFAULT */
+            ShExecInfo.hwnd = NULL;
+            ShExecInfo.lpVerb = NULL; // NULL=="open"
+            ShExecInfo.lpFile = m_command;
+            ShExecInfo.lpParameters = NULL;
+            ShExecInfo.lpDirectory = NULL;
+            ShExecInfo.nShow = SW_SHOWNORMAL; // SW_SHOW, SW_SHOWNA
+            ShExecInfo.hInstApp = NULL;
+            ::ShellExecuteEx(&ShExecInfo);
+           }
+       }
+};
+
+
+/////////////////////////////////////////////////////////////////////////////
+struct event_action_pair_t
+  {
+   mouse_event_t event;
+   action_t action;
+  };
+template<std::size_t N> class actions_map_t
+{
+ private:
+    event_action_pair_t elements[N];
+
+ public:
+    consteval actions_map_t(const event_action_pair_t(&arr)[N]) noexcept
+       {
+        for( std::size_t i=0; i<N; ++i )
+           {
+            elements[i].event = arr[i].event;
+            elements[i].action = arr[i].action;
+           }
+       }
+
+    [[nodiscard]] consteval action_t operator[](const mouse_event_t event) const
+       {
+        for( const event_action_pair_t& elem : elements )
+           {
+            if( elem.event==event )
+               {
+                return elem.action;
+               }
+           }
+        return action_t{}; // Empty action
+       }
+};
+
+
+// Defined as globals here because must be visible in mouseHookCallback
+// Also, can't aggregate because rectangles are determined at runtime,
+// while actions at compile time
+
+RECT top_left_rect{};
+//constexpr actions_map_t top_left_actions = <mouse-dwell: task view (WIN+TAB)>
+
+RECT top_right_rect{};
+constexpr actions_map_t top_right_actions =
+  {{
+    {mouse_event_t::left_button, ACTIONS_FOLDER "top-right-left-click.lnk"},
+    {mouse_event_t::middle_button, ACTIONS_FOLDER "top-right-middle-click.lnk"},
+    {mouse_event_t::wheel_up, ACTIONS_FOLDER "top-right-wheel-up.lnk"},
+    {mouse_event_t::wheel_down, ACTIONS_FOLDER "top-right-wheel-down.lnk"}
+  }};
+
+RECT top_band_rect{};
+constexpr actions_map_t top_band_actions =
+  {{
+    {mouse_event_t::left_button, ACTIONS_FOLDER "top-band-left-click.lnk"},
+    {mouse_event_t::middle_button, ACTIONS_FOLDER "top-band-middle-click.lnk"},
+    {mouse_event_t::extended_button, ACTIONS_FOLDER "top-band-x-click.lnk"},
+    {mouse_event_t::wheel_up, ACTIONS_FOLDER "top-band-wheel-up.lnk"},
+    {mouse_event_t::wheel_down, ACTIONS_FOLDER "top-band-wheel-down.lnk"}
+  }};
+
+RECT left_band_rect{};
+constexpr actions_map_t left_band_actions =
+  {{
+    {mouse_event_t::left_button, ACTIONS_FOLDER "left-band-left-click.lnk"},
+    {mouse_event_t::middle_button, ACTIONS_FOLDER "left-band-middle-click.lnk"},
+    {mouse_event_t::extended_button, ACTIONS_FOLDER "left-band-x-click.lnk"},
+    {mouse_event_t::wheel_up, ACTIONS_FOLDER "left-band-wheel-up.lnk"},
+    {mouse_event_t::wheel_down, ACTIONS_FOLDER "left-band-wheel-down.lnk"}
+  }};
+
+RECT right_band_rect{};
+constexpr actions_map_t right_band_actions =
+  {{
+    {mouse_event_t::left_button, ACTIONS_FOLDER "right-band-left-click.lnk"},
+    {mouse_event_t::middle_button, ACTIONS_FOLDER "right-band-middle-click.lnk"},
+    {mouse_event_t::right_button, ACTIONS_FOLDER "right-band-right-click.lnk"},
+    {mouse_event_t::extended_button, ACTIONS_FOLDER "right-band-x-click.lnk"},
+    {mouse_event_t::wheel_up, ACTIONS_FOLDER "right-band-wheel-up.lnk"},
+    {mouse_event_t::wheel_down, ACTIONS_FOLDER "right-band-wheel-down.lnk"}
+  }};
+
 
 //---------------------------------------------------------------------------
-// Split a string_view, discarding the separator character
-//constexpr std::pair<strview,strview> split(const strview strv, const strview::value_type ch)
-//{
-//    static const strview::value_type empty_str[1] = { '\0' }; // Empty string
-//    const auto pos = strv.find_first_of(ch); // strview::size_type
-//    if( pos == std::string_view::npos ) return std::make_pair(strv, empty_str);
-//    return std::make_pair(strv.substr(0, pos), strv.substr(pos+1, strv.size()-pos-1));
-//}
+void determine_screen_regions(const int size)
+{
+    // Retrieve the rectangle of the first monitor
+    const RECT Rscreen{ 0, 0, ::GetSystemMetrics(SM_CXSCREEN), ::GetSystemMetrics(SM_CYSCREEN) };
+
+    //                   [top]
+    //  [top-left] ┌─┬──════════──┬─┐ [top-right]
+    //             ├─┘            └─┤
+    //             ║                ║
+    //      [left] ║                ║ [right]
+    //             └────────────────┘
+
+    top_left_rect =
+        RECT{
+                Rscreen.left - 100, // left
+                Rscreen.top - 100, // top
+                Rscreen.left + size, // right
+                Rscreen.top + size // bottom
+            };
+    EVTLOG("top-left area: {};{} , {};{}", top_left_rect.left, top_left_rect.top, top_left_rect.right, top_left_rect.bottom)
+
+
+    top_right_rect =
+        RECT{
+                Rscreen.right - size, // left
+                Rscreen.top - 1, // top
+                Rscreen.right + 1, // right
+                Rscreen.top + size // bottom
+            };
+    EVTLOG("top-right area: {};{} , {};{}", top_right_rect.left, top_right_rect.top, top_right_rect.right, top_right_rect.bottom)
+
+    top_band_rect =
+        RECT{
+                Rscreen.left + (Rscreen.right - Rscreen.left)/3, // left
+                Rscreen.top - 1, // top
+                Rscreen.right - (Rscreen.right - Rscreen.left)/3, // right
+                Rscreen.top + 1 // bottom
+            };
+    EVTLOG("top-band area: {};{} , {};{}", top_band_rect.left, top_band_rect.top, top_band_rect.right, top_band_rect.bottom)
+
+    left_band_rect =
+        RECT{
+                Rscreen.left - 1, // left
+                Rscreen.top + (Rscreen.bottom - Rscreen.top)/3, // top
+                Rscreen.left + 1, // right
+                Rscreen.bottom - (Rscreen.bottom - Rscreen.top)/3 // bottom
+            };
+    EVTLOG("left-band area: {};{} , {};{}", left_band_rect.left, left_band_rect.top, left_band_rect.right, left_band_rect.bottom)
+
+    right_band_rect =
+        RECT{
+                Rscreen.right - 1, // left
+                Rscreen.top + (Rscreen.bottom - Rscreen.top)/3, // top
+                Rscreen.right + 1, // right
+                Rscreen.bottom - (Rscreen.bottom - Rscreen.top)/3 // bottom
+            };
+    EVTLOG("right-band area: {};{} , {};{}", right_band_rect.left, right_band_rect.top, right_band_rect.right, right_band_rect.bottom)
+}
 
 
 //---------------------------------------------------------------------------
-inline bool in_rect(const RECT& r, const POINT& p) noexcept
+[[nodiscard]] inline constexpr bool is_point_inside(const RECT& r, const POINT& p) noexcept
    {
     return p.x>=r.left && p.x<=r.right && p.y>=r.top && p.y<r.bottom;
    }
 
 
 //---------------------------------------------------------------------------
-// Extract high word as signed
-inline int16_t hi_word(const DWORD dw) noexcept
+[[nodiscard]] inline bool is_cursor_inside(const RECT& r) noexcept
    {
-    static_assert( sizeof(int16_t)==2, "what?? int16_t is not 2 bytes??" );
-    return int16_t((dw>>16) & 0xFFFF);
+    POINT cur_pos;
+    if( ::GetCursorPos(&cur_pos) )
+       {
+        return is_point_inside(r, cur_pos);
+       }
+    return false;
    }
 
 
 //---------------------------------------------------------------------------
-// Extract most significant bit from byte
-inline bool msb(const BYTE b) noexcept { return (b & 0x80); }
-
-
-//---------------------------------------------------------------------------
-// Start a program/Open file (without wait)
-void shell_exec(LPCTSTR pth, LPCTSTR args =NULL) noexcept
+[[nodiscard]] inline bool is_modifier_key_pressed() noexcept
 {
-    // Expand possible environmental variables
-    std::array<TCHAR,MAX_PATH> buf;
-    DWORD len = ::ExpandEnvironmentStrings(pth, buf.data(), (DWORD) buf.size());
+    struct local
+       {// Key is down if the most significant bit is 1
+        [[nodiscard]] static inline constexpr bool is_down(const BYTE b) noexcept { return (b & 0x80); }
+       };
 
-    SHELLEXECUTEINFO ShExecInfo = {0};
-    ShExecInfo.cbSize = sizeof(SHELLEXECUTEINFO);
-    ShExecInfo.fMask = 0; /* SEE_MASK_DEFAULT */
-    ShExecInfo.hwnd = NULL;
-    ShExecInfo.lpVerb = NULL; // NULL=="open"
-    ShExecInfo.lpFile = buf.data(); // TCHAR[MAX_PATH]
-    ShExecInfo.lpParameters = args;
-    ShExecInfo.lpDirectory = NULL;
-    ShExecInfo.nShow = SW_SHOWNORMAL; // SW_SHOW, SW_SHOWNA
-    ShExecInfo.hInstApp = NULL;
-    ::ShellExecuteEx(&ShExecInfo);
+    BYTE keyboard_status[256]; // From winapi docs, the maximum keys are 256
 
-    // . Check errors
-    //int retcode = reinterpret_cast<int>(H);
-    //if( retcode >= 0 && retcode <= 32 )
-    //   {
-    //    switch( retcode )
-    //       {
-    //        case 0 : throw Exception("The operating system is out of memory or resources");
-    //        case ERROR_FILE_NOT_FOUND : throw Exception("The specified file was not found");
-    //        case ERROR_PATH_NOT_FOUND : throw Exception("The specified path was not found");
-    //        case ERROR_BAD_FORMAT : throw Exception("The .EXE file is invalid (non-Win32 .EXE or error in .EXE image)");
-    //        case SE_ERR_ACCESSDENIED : throw Exception("The operating system denied access to the specified file");
-    //        case SE_ERR_ASSOCINCOMPLETE : throw Exception("The filename association is incomplete or invalid");
-    //        case SE_ERR_DDEBUSY : throw Exception("The DDE transaction could not be completed because other DDE transactions were being processed");
-    //        case SE_ERR_DDEFAIL : throw Exception("The DDE transaction failed");
-    //        case SE_ERR_DDETIMEOUT : throw Exception("The DDE transaction could not be completed because the request timed out");
-    //        case SE_ERR_DLLNOTFOUND : throw Exception("The specified dynamic-link library was not found");
-    //        //case SE_ERR_FNF : throw Exception("The specified file was not found");
-    //        case SE_ERR_NOASSOC : throw Exception("There is no application associated with the given filename extension");
-    //        case SE_ERR_OOM : throw Exception("There was not enough memory to complete the operation");
-    //        //case SE_ERR_PNF : throw Exception("The specified path was not found.");
-    //        case SE_ERR_SHARE : throw Exception("A sharing violation occurred");
-    //        default : throw Exception("An unknown error occurred");
-    //       }
-    //   }
-} // 'shell_exec'
-//---------------------------------------------------------------------------
-// Invoking facility
-inline void shell_exec(const action_t& act) noexcept
-{
-    shell_exec(act.pth.data(), act.args.data() );
+    if( ::GetKeyboardState(keyboard_status) )
+       {
+        return local::is_down(keyboard_status[VK_SHIFT]) ||
+               local::is_down(keyboard_status[VK_CONTROL]) ||
+               local::is_down(keyboard_status[VK_MENU]) ||
+               local::is_down(keyboard_status[VK_LWIN]) ||
+               local::is_down(keyboard_status[VK_RWIN]) ||
+               local::is_down(keyboard_status[VK_LBUTTON]) ||
+               local::is_down(keyboard_status[VK_RBUTTON]);
+       }
+    return false;
 }
 
 
 //---------------------------------------------------------------------------
-// Get primary monitor rectangle
-RECT get_screen_rect() noexcept
+inline void activate_task_view() noexcept
 {
-    // The bounding rectangle of all display monitors:
-    //RECT Rscreen; ::GetWindowRect(::GetDesktopWindow(), &Rscreen);
-    //int xo = ::GetSystemMetrics(SM_XVIRTUALSCREEN);
-    //int yo = ::GetSystemMetrics(SM_YVIRTUALSCREEN);
-    //RECT Rscreen{xo, yo, xo+::GetSystemMetrics(SM_CXVIRTUALSCREEN), yo+::GetSystemMetrics(SM_CYVIRTUALSCREEN)};
-
-    // Just the primary monitor (by definition has its upper left corner at (0,0))
-    RECT Rscreen{ 0, 0, ::GetSystemMetrics(SM_CXSCREEN), ::GetSystemMetrics(SM_CYSCREEN) };
-
-    //HMONITOR h_pri_mon = ::MonitorFromPoint(POINT{0,0}, MONITOR_DEFAULTTOPRIMARY);
-    //MONITORINFO mon_info{ 0 }; mon_info.cbSize = sizeof(mon_info);
-    //::GetMonitorInfo(h_pri_mon, &mon_info);
-    //RECT Rscreen{mon_info.rcMonitor};
-
-    return Rscreen;
-} // 'get_screen_rect'
-
-
-//---------------------------------------------------------------------------
-// Set zones on primary monitor
-RECT Rtl, Rtr, Rr, Rl, Rt;
-void set_zones(const LONG siz) noexcept
-{
-    RECT Rscreen = get_screen_rect();
-    LONG Dw = (Rscreen.right - Rscreen.left) / 3; // [pix] Screeen width fraction
-    LONG Dh = (Rscreen.bottom - Rscreen.top) / 3; // [pix] Screeen height fraction
-
-    // Top left corner (autotrigger)
-    constexpr LONG outside_size = 100; // [pix] Outside screen
-                                       // This outside area is important because when moving
-                                       // the cursor against the screen side its coordinates
-                                       // are not limited but follow the mouse movement
-    Rtl.left = Rscreen.left - outside_size;
-    Rtl.top = Rscreen.top - outside_size;
-    Rtl.right = Rscreen.left + siz;
-    Rtl.bottom = Rscreen.top + siz;
-
-    // Top right corner
-    Rtr.left = Rscreen.right - siz;
-    Rtr.top = Rscreen.top - 1;
-    Rtr.right = Rscreen.right + 1;
-    Rtr.bottom = Rscreen.top + siz;
-
-    // Right band
-    Rr.left = Rscreen.right - 1;
-    Rr.top = Rscreen.top + Dh;
-    Rr.right = Rscreen.right + 1;
-    Rr.bottom = Rscreen.bottom - Dh;
-
-    // Left band
-    Rl.left = Rscreen.left - 1;
-    Rl.top = Rr.top;
-    Rl.right = Rscreen.left + 1;
-    Rl.bottom = Rr.bottom;
-
-    // Top band
-    Rt.left = Rscreen.left + Dw;
-    Rt.top = Rscreen.top - 1;
-    Rt.right = Rscreen.right - Dw;
-    Rt.bottom = Rscreen.top + 1;
-} // 'set_zones'
-
+    // Windows task view is activated by Win+Tab key sequence
+    constexpr std::array<INPUT,4> inWinTab = {{
+                                                { INPUT_KEYBOARD, { VK_LWIN, 0 } },
+                                                { INPUT_KEYBOARD, { VK_TAB,  0 } },
+                                                { INPUT_KEYBOARD, { VK_TAB,  KEYEVENTF_KEYUP } },
+                                                { INPUT_KEYBOARD, { VK_LWIN, KEYEVENTF_KEYUP } }
+                                             }};
+    ::SendInput( (UINT) inWinTab.size(), (LPINPUT) inWinTab.data(), sizeof(INPUT) );
+    //if( ret!=inWinTab.size() ) failed
+}
 
 
 //---------------------------------------------------------------------------
 // Check auto-trigger if the cursor stays in the zone without any activity
-static DWORD WINAPI checkAutoTrigger(LPVOID lpParameter) noexcept
+static DWORD WINAPI check_autotrigger(LPVOID lpParameter) noexcept
 {
-    const RECT* Rzone = reinterpret_cast<const RECT *>(lpParameter);
-
     ::Sleep( dwell_time ); // This should be nice for CPU load
 
-    // No auto-trigger if any modifier keys or mouse button are pressed
-    // Key is down if the most significant bit is 1
-    BYTE ks[256]; // From winapi docs, the maximum keys are 256
-    if( ::GetKeyboardState(ks) )
+    // No auto-trigger if the cursor left the zone
+    const RECT* const zone_rect = reinterpret_cast<const RECT *>(lpParameter);
+    if( !is_cursor_inside(*zone_rect) )
        {
-        if( msb(ks[VK_SHIFT]) || msb(ks[VK_CONTROL]) || msb(ks[VK_MENU]) ||
-            msb(ks[VK_LWIN]) || msb(ks[VK_RWIN]) ||
-            msb(ks[VK_LBUTTON]) || msb(ks[VK_RBUTTON]) ) return -4;
+        return 1;
        }
 
-    // No auto-trigger if the cursor left the zone
-    POINT cur_pos;
-    if( !::GetCursorPos(&cur_pos) ) return -3;
-    if( !in_rect(*Rzone, cur_pos) ) return -2;
+    // No auto-trigger if any modifier keys or mouse button are pressed
+    if( is_modifier_key_pressed() )
+       {
+        return 2;
+       }
 
-    // Trigger the action
-    // TODO: action basing on zone
-    if( ::SendInput( (UINT) inWinTab.size(), (LPINPUT) inWinTab.data(), sizeof(INPUT)) != inWinTab.size() ) return -1;
-    return 0; // Autotrigger done
-} // 'checkAutoTrigger'
+    activate_task_view();
+
+    return 0;
+}
 
 
 //---------------------------------------------------------------------------
 static LRESULT CALLBACK mouseHookCallback(int nCode, WPARAM wParam, LPARAM lParam) noexcept
 {
-    if(nCode<0) return ::CallNextHookEx(NULL, nCode, wParam, lParam); // Do not process
+    if( nCode>=0 )
+       {
+        // Mouse message data
+        MSLLHOOKSTRUCT* const evt = (MSLLHOOKSTRUCT*) lParam;
+        //    DWORD     mouseData   // WM_MOUSEWHEEL: hiword>0:wheel-fwd, hiword<0:wheel-bck
+        //                          // WM_*BUTTON*: hiword=1:btn1, hiword=2:btn2
+        const POINT& cursor_pos = evt->pt;
 
-    // Mouse message data
-    MSLLHOOKSTRUCT *evt = (MSLLHOOKSTRUCT *) lParam;
-    //    POINT     pt          // Coordinates
-    //    DWORD     mouseData   // WM_MOUSEWHEEL: hiword>0:wheel-fwd, hiword<0:wheel-bck
-    //                          // WM_*BUTTON*: hiword=1:btn1, hiword=2:btn2
+        // Zones that trigger with an action: check other mouse events
+        if( wParam!=WM_MOUSEMOVE )
+           {//EVTLOG("WM_MOUSE* {:#06x}",wParam)
+            const mouse_event_t event_id = get_event_id(wParam, evt->mouseData);
 
-    // Zones with autotrigger: check if mouse moved
-    if( wParam==WM_MOUSEMOVE )
-       {// 'Mouse moved'
+            #define SELECT_ACTION(ZONE)\
+                switch( event_id )\
+                   {\
+                    case mouse_event_t::left_button: ZONE##_actions[mouse_event_t::left_button].execute(); break;\
+                    case mouse_event_t::right_button: ZONE##_actions[mouse_event_t::right_button].execute(); break;\
+                    case mouse_event_t::middle_button: ZONE##_actions[mouse_event_t::middle_button].execute(); break;\
+                    case mouse_event_t::extended_button: ZONE##_actions[mouse_event_t::extended_button].execute(); break;\
+                    case mouse_event_t::wheel_up: ZONE##_actions[mouse_event_t::wheel_up].execute(); break;\
+                    case mouse_event_t::wheel_down: ZONE##_actions[mouse_event_t::wheel_down].execute(); break;\
+                    case mouse_event_t::unknown: break;\
+                   } // EVTLOG("Event {} in {} (cursor {};{})", event_id, #ZONE, cursor_pos.x, cursor_pos.y)
 
-        // ----------------------------- "top left" zone
-        // Top left corner is fixed: lingering with the mouse, triggers <WIN+TAB>
-        static HANDLE thrdRtl = INVALID_HANDLE_VALUE; // Thread checking "top left" zone autotrigger
-        if( in_rect(Rtl, evt->pt) )
-           {// In "top left"
-            // Start auto-trigger check thread (if not already started)
-            if( thrdRtl == INVALID_HANDLE_VALUE )
+            if( is_point_inside(top_right_rect, cursor_pos) )
                {
-                EVTLOG("Entered top left corner " << evt->pt.x << ';' << evt->pt.y)
-                thrdRtl = ::CreateThread( nullptr,          // LPSECURITY_ATTRIBUTES   lpThreadAttributes
-                                          0,                // SIZE_T                  dwStackSize
-                                          checkAutoTrigger, // LPTHREAD_START_ROUTINE  lpStartAddress
-                                          (LPVOID) &Rtl,    // LPVOID                  lpParameter
-                                          0,                // DWORD                   dwCreationFlags
-                                          nullptr );        // LPDWORD                 lpThreadId
+                SELECT_ACTION(top_right)
+               }
+            else if( is_point_inside(top_band_rect, cursor_pos) )
+               {
+                SELECT_ACTION(top_band)
+               }
+            else if( is_point_inside(left_band_rect, cursor_pos) )
+               {
+                SELECT_ACTION(left_band)
+               }
+            else if( is_point_inside(right_band_rect, cursor_pos) )
+               {
+                SELECT_ACTION(right_band)
                }
            }
+
+        // Zones with autotrigger: check if mouse moved
         else
-           {// Not in "top left"
-            //EVTLOG("Point " << evt->pt.x << ';' << evt->pt.y << " not in " << Rtl.left << ';' << Rtl.top << " , " << Rtl.right << ';' << Rtl.bottom )
-            // Abort auto-trigger check thread (if running)
-            if( thrdRtl != INVALID_HANDLE_VALUE )
-               {
-                EVTLOG("Exited top left corner " << evt->pt.x << ';' << evt->pt.y)
-                ::TerminateThread(thrdRtl, 0);
-                ::CloseHandle(thrdRtl);
-                thrdRtl = INVALID_HANDLE_VALUE;
+           {// Mouse movement
+            // Top left corner is fixed: lingering with the mouse, triggers task view
+            static HANDLE h = INVALID_HANDLE_VALUE; // Thread checking "top left" zone autotrigger
+
+            if( is_point_inside(top_left_rect, cursor_pos) )
+               {// In "top left" area
+                // Start auto-trigger check thread (if not already started)
+                if( h==INVALID_HANDLE_VALUE )
+                   {
+                    EVTLOG("Entered top left corner {};{}", cursor_pos.x, cursor_pos.y)
+                    h = ::CreateThread( nullptr,           // LPSECURITY_ATTRIBUTES   lpThreadAttributes
+                                        0,                 // SIZE_T                  dwStackSize
+                                        check_autotrigger, // LPTHREAD_START_ROUTINE  lpStartAddress
+                                        (LPVOID) &top_left_rect, // LPVOID            lpParameter
+                                        0,                 // DWORD                   dwCreationFlags
+                                        nullptr );         // LPDWORD                 lpThreadId
+                   }
+               }
+            else
+               {// Not in "top left" area
+                //EVTLOG("Cursor {};{} not in R[{};{},{};{}]", cursor_pos.x, cursor_pos.y, top_left_rect.left, top_left_rect.top, top_left_rect.right, top_left_rect.bottom)
+                // Abort auto-trigger check thread (if running)
+                if( h!=INVALID_HANDLE_VALUE )
+                   {
+                    EVTLOG("Exited top left corner {};{}", cursor_pos.x, cursor_pos.y)
+                    ::TerminateThread(h, 0);
+                    ::CloseHandle(h);
+                    h = INVALID_HANDLE_VALUE;
+                   }
                }
            }
-       } // 'Mouse moved'
-
-    // Zones that trigger with an action: check other mouse events
-    else
-       {// 'Other mouse event'
-        //EVTLOG("WM_?? 0x" << std::hex << wParam)
-
-        // Compile-time facilities: this should avoid needless tests
-        constexpr bool Rtr_has_wheel_actions = Rtr_wheelfwd.defined() && Rtr_wheelbck.defined();
-        constexpr bool Rtr_has_actions = Rtr_lclick.defined() || Rtr_mclick.defined() || Rtr_rclick.defined() || Rtr_xclick.defined() || Rtr_has_wheel_actions;
-        constexpr bool Rr_has_wheel_actions = Rr_wheelfwd.defined() && Rr_wheelbck.defined();
-        constexpr bool Rr_has_actions = Rr_lclick.defined() || Rr_mclick.defined() || Rr_rclick.defined() || Rr_xclick.defined() || Rr_has_wheel_actions;
-        constexpr bool Rl_has_wheel_actions = Rl_wheelfwd.defined() && Rl_wheelbck.defined();
-        constexpr bool Rl_has_actions = Rl_lclick.defined() || Rl_mclick.defined() || Rl_rclick.defined() || Rl_xclick.defined() || Rl_has_wheel_actions;
-        constexpr bool Rt_has_wheel_actions = Rt_wheelfwd.defined() && Rt_wheelbck.defined();
-        constexpr bool Rt_has_actions = Rt_lclick.defined() || Rt_mclick.defined() || Rt_rclick.defined() || Rt_xclick.defined() || Rt_has_wheel_actions;
-
-
-        // ----------------------------- "top right" zone
-        if( Rtr_has_actions && in_rect(Rtr, evt->pt) )
-           {
-            // 'Left click'
-            if( Rtr_lclick.defined() && wParam==WM_LBUTTONDOWN )
-               {
-                EVTLOG("Left click in top right corner " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( Rtr_lclick );
-               }
-            // 'Right click'
-            else if( Rtr_rclick.defined() && wParam==WM_RBUTTONDOWN )
-               {
-                EVTLOG("Right click in top right corner " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( Rtr_rclick );
-               }
-            // 'Middle click'
-            else if( Rtr_mclick.defined() && wParam==WM_MBUTTONDOWN )
-               {
-                EVTLOG("Middle click in top right corner " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( Rtr_mclick );
-               }
-            // 'eXpansion button click'
-            else if( Rtr_xclick.defined() && wParam==WM_XBUTTONDOWN )
-               {
-                EVTLOG("X click in top right corner " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( Rtr_xclick );
-               }
-            // 'Mouse wheel'
-            else if( Rtr_has_wheel_actions && wParam==WM_MOUSEWHEEL )
-               {
-                if( Rtr_wheelfwd.defined() && hi_word(evt->mouseData)>0 )
-                   {
-                    EVTLOG("Fwd Wheel in top right corner " << hi_word(evt->mouseData))
-                    shell_exec( Rtr_wheelfwd );
-                   }
-                else if( Rtr_wheelbck.defined() && hi_word(evt->mouseData)<0 )
-                   {
-                    EVTLOG("Bck Wheel in top right corner " << hi_word(evt->mouseData))
-                    shell_exec( Rtr_wheelbck );
-                   }
-               }
-           } // "top right" zone
-
-        // ----------------------------- "right band" zone
-        else if( Rr_has_actions && in_rect(Rr, evt->pt) )
-           {
-            // 'Left click'
-            if( Rr_lclick.defined() && wParam==WM_LBUTTONDOWN )
-               {
-                EVTLOG("Left click in right band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( Rr_lclick );
-               }
-            // 'Right click'
-            else if( Rr_rclick.defined() && wParam==WM_RBUTTONDOWN )
-               {
-                EVTLOG("Right click in right band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( Rr_rclick );
-               }
-            // 'Middle click'
-            else if( Rr_mclick.defined() && wParam==WM_MBUTTONDOWN )
-               {
-                EVTLOG("Middle click in right band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( Rr_mclick );
-               }
-            // 'eXpansion button click'
-            else if( Rr_xclick.defined() && wParam==WM_XBUTTONDOWN )
-               {
-                EVTLOG("X click in right band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( Rr_xclick );
-               }
-            // 'Mouse wheel'
-            else if( Rr_has_wheel_actions && wParam==WM_MOUSEWHEEL )
-               {
-                if( Rr_wheelfwd.defined() && hi_word(evt->mouseData)>0 )
-                   {
-                    EVTLOG("Fwd Wheel in right band " << hi_word(evt->mouseData))
-                    shell_exec( Rr_wheelfwd );
-                   }
-                else if( Rr_wheelbck.defined() && hi_word(evt->mouseData)<0 )
-                   {
-                    EVTLOG("Bck Wheel in right band " << hi_word(evt->mouseData))
-                    shell_exec( Rr_wheelbck );
-                   }
-               }
-           } // "right band" zone
-
-        // ----------------------------- "left band" zone
-        else if( Rl_has_actions && in_rect(Rl, evt->pt) )
-           {
-            // 'Left click'
-            if( Rl_lclick.defined() && wParam==WM_LBUTTONDOWN )
-               {
-                EVTLOG("Left click in left band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( Rl_lclick );
-               }
-            // 'Right click'
-            else if( Rl_rclick.defined() && wParam==WM_RBUTTONDOWN )
-               {
-                EVTLOG("Right click in left band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( Rl_rclick );
-               }
-            // 'Middle click'
-            else if( Rl_mclick.defined() && wParam==WM_MBUTTONDOWN )
-               {
-                EVTLOG("Middle click in left band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( Rl_mclick );
-               }
-            // 'eXpansion button click'
-            else if( Rl_xclick.defined() && wParam==WM_XBUTTONDOWN )
-               {
-                EVTLOG("X click in left band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( Rl_xclick );
-               }
-            // 'Mouse wheel'
-            else if( Rl_has_wheel_actions && wParam==WM_MOUSEWHEEL )
-               {
-                if( Rl_wheelfwd.defined() && hi_word(evt->mouseData)>0 )
-                   {
-                    EVTLOG("Fwd Wheel in left band " << hi_word(evt->mouseData))
-                    shell_exec( Rl_wheelfwd );
-                   }
-                else if( Rl_wheelbck.defined() && hi_word(evt->mouseData)<0 )
-                   {
-                    EVTLOG("Bck Wheel in left band " << hi_word(evt->mouseData))
-                    shell_exec( Rl_wheelbck );
-                   }
-               }
-           } // "left band" zone
-
-        // ----------------------------- "top band" zone
-        else if( Rt_has_actions && in_rect(Rt, evt->pt) )
-           {
-            // 'Left click'
-            if( Rt_lclick.defined() && wParam==WM_LBUTTONDOWN )
-               {
-                EVTLOG("Left click in top band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( Rt_lclick );
-               }
-            // 'Right click'
-            else if( Rt_rclick.defined() && wParam==WM_RBUTTONDOWN )
-               {
-                EVTLOG("Right click in top band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( Rt_rclick );
-               }
-            // 'Middle click'
-            else if( Rt_mclick.defined() && wParam==WM_MBUTTONDOWN )
-               {
-                EVTLOG("Middle click in top band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( Rt_mclick );
-               }
-            // 'eXpansion button click'
-            else if( Rt_xclick.defined() && wParam==WM_XBUTTONDOWN )
-               {
-                EVTLOG("X click in top band " << evt->pt.x << ';' << evt->pt.y)
-                shell_exec( Rt_xclick );
-               }
-            // 'Mouse wheel'
-            else if( Rt_has_wheel_actions && wParam==WM_MOUSEWHEEL )
-               {
-                if( Rt_wheelfwd.defined() && hi_word(evt->mouseData)>0 )
-                   {
-                    EVTLOG("Fwd Wheel in top band " << hi_word(evt->mouseData))
-                    shell_exec( Rt_wheelfwd );
-                   }
-                else if( Rt_wheelbck.defined() && hi_word(evt->mouseData)<0 )
-                   {
-                    EVTLOG("Bck Wheel in top band " << hi_word(evt->mouseData))
-                    shell_exec( Rt_wheelbck );
-                   }
-               }
-           } // "top band" zone
-
-       } // 'Other mouse event'
+       }
 
     // Finally, pass this event to possible other hooks
     return ::CallNextHookEx(NULL, nCode, wParam, lParam);
-} // 'mouseHookCallback'
+}
 
 
 //---------------------------------------------------------------------------
-int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
+int CALLBACK WinMain(HINSTANCE, HINSTANCE, LPSTR, int) //int main()
 {
-    // Init
-    set_zones(corner_size);
+    EVTLOG("hotcorners " __DATE__ " " __TIME__)
+    determine_screen_regions(corner_size);
 
-    // Because ShellExecuteEx can delegate execution to Shell extensions (data sources, context menu handlers,
-    // verb implementations) that are activated using Component Object Model (COM), COM should be initialized
-    // before ShellExecuteEx is called. Some Shell extensions require the COM single-threaded apartment (STA)
-    // type. In that case, COM should be initialized as shown here:
-    //::CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    // Register a global key shortcut to quit this program?
+    //::RegisterHotKey(NULL, 1, MOD_CONTROL | MOD_ALT, 'Q'); // CTRL+ALT+Q
 
     // Intercept mouse events
-    HHOOK mouse_hook;
-    if( !(mouse_hook = ::SetWindowsHookEx(WH_MOUSE_LL, mouseHookCallback, NULL, 0)) ) return 1;
-
-    // Facility: key shortcut to quit this program
-    //::RegisterHotKey(NULL, 1, MOD_CONTROL | MOD_ALT, 'Q'); // CTRL+ALT+Q
+    HHOOK mouse_hook = ::SetWindowsHookEx(WH_MOUSE_LL, mouseHookCallback, NULL, 0);
+    if( !mouse_hook  )
+       {
+        return 1;
+       }
 
     // Message pump for 'WH_MOUSE_LL'
     MSG Msg;
@@ -579,7 +465,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
     // Finally
     ::UnhookWindowsHookEx(mouse_hook);
     return 0;
-} // 'WinMain'
+}
 
 
 

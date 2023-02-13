@@ -33,9 +33,9 @@ BEGIN
             VALUE "Comment", "Utility for hot corners in Windows 10"
             VALUE "CompanyName", "MG"
             VALUE "FileDescription", "Hot Corners"
-            VALUE "FileVersion", "0.5.0.0"
+            VALUE "FileVersion", "0.6.0.0"
             VALUE "ProductName", "Hot Corner"
-            VALUE "ProductVersion", "0.5.0.0"
+            VALUE "ProductVersion", "0.6.0.0"
         END
     END
     BLOCK "VarFileInfo"
