@@ -6,7 +6,7 @@
 //  https://github.com/taviso/hotcorner
 //  ---------------------------------------------
 //  No configuration file, map the events with
-//  links in %UserProfile%\sys\corner-actions
+//  links in ACTIONS_FOLDER defined below
 //  Top left corner is fixed to "task manage"
 //  ---------------------------------------------
 //                   [top]
@@ -21,7 +21,6 @@ constexpr int corner_size = 5; // [pix] Corner area size
 constexpr unsigned int dwell_time = 300; // [ms] Cursor dwell time for auto-trigger
 #define ACTIONS_FOLDER "C:\\Users\\user\\sys\\corner-actions\\"
 //  ---------------------------------------------
-
 // MS Windows stuff
 #include <windows.h>
     // DWORD, RECT, POINT, LPVOID, LPSTR, HINSTANCE, ...
@@ -83,8 +82,8 @@ constexpr mouse_event_t get_event_id(const WPARAM win_mouse_event_id, const DWOR
         case WM_XBUTTONDOWN: return mouse_event_t::extended_button;
         case WM_MOUSEWHEEL:  return local::hi_word(add_data)>0 ? mouse_event_t::wheel_up
                                                                : mouse_event_t::wheel_down;
-        default: return mouse_event_t::unknown;
        }
+    return mouse_event_t::unknown;
 }
 
 
@@ -107,8 +106,6 @@ class action_t final
        {
         if( is_defined() )
            {
-            //std::array<char,MAX_PATH> buf;
-            //const DWORD len = ::ExpandEnvironmentStrings(m_command, buf.data(), buf.size());
             SHELLEXECUTEINFO ShExecInfo = {0};
             ShExecInfo.cbSize = sizeof(SHELLEXECUTEINFO);
             ShExecInfo.fMask = 0; /* SEE_MASK_DEFAULT */
@@ -126,7 +123,7 @@ class action_t final
 
 
 /////////////////////////////////////////////////////////////////////////////
-struct event_action_pair_t
+struct event_action_pair_t final
   {
    mouse_event_t event;
    action_t action;
@@ -146,7 +143,7 @@ template<std::size_t N> class actions_map_t
            }
        }
 
-    [[nodiscard]] consteval action_t operator[](const mouse_event_t event) const
+    [[nodiscard]] consteval action_t operator[](const mouse_event_t event) const noexcept
        {
         for( const event_action_pair_t& elem : elements )
            {
@@ -209,7 +206,7 @@ constexpr actions_map_t right_band_actions =
 
 
 //---------------------------------------------------------------------------
-void determine_screen_regions(const int size)
+void determine_screen_regions(const int size) noexcept
 {
     // Retrieve the rectangle of the first monitor
     const RECT Rscreen{ 0, 0, ::GetSystemMetrics(SM_CXSCREEN), ::GetSystemMetrics(SM_CYSCREEN) };
@@ -471,7 +468,6 @@ int CALLBACK WinMain(HINSTANCE, HINSTANCE, LPSTR, int) //int main()
 
 //#include <windows.h>
 //#include <gdiplus.h>
-//#include <stdio.h>
 //using namespace Gdiplus;
 //
 //void draw()

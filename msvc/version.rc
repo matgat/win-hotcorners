@@ -14,8 +14,8 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 0,5,0,0
- PRODUCTVERSION 0,5,0,0
+ FILEVERSION 0,0,0,0
+ PRODUCTVERSION 0,6,1,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -32,10 +32,9 @@ BEGIN
         BEGIN
             VALUE "Comment", "Utility for hot corners in Windows 10"
             VALUE "CompanyName", "MG"
-            VALUE "FileDescription", "Hot Corners"
-            VALUE "FileVersion", "0.6.0.0"
-            VALUE "ProductName", "Hot Corner"
-            VALUE "ProductVersion", "0.6.0.0"
+            VALUE "FileVersion", "0.0.0.0"
+            VALUE "ProductName", "HotCorners"
+            VALUE "ProductVersion", "0.6.1.0"
         END
     END
     BLOCK "VarFileInfo"

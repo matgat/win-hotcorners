@@ -11,7 +11,9 @@ inspired by [Tavis Ormandy](mailto:taviso@cmpxchg8b.com)'s
 
 Configure
 ---------
-Hard code the path to your own links, suggested names are:
+Edit the hard-coded string literal `ACTIONS_FOLDER`
+setting the path to the folder where you plan to put the links
+of your actions:
 |                               |                               |
 |-------------------------------|-------------------------------|
 | `left-band-left-click.lnk`    | left band left click          |
@@ -42,11 +44,13 @@ Hard code the path to your own links, suggested names are:
 //      [left] ║                ║ [right]
 //             └────────────────┘
 ```
-The top-left corner is not configurable and reserved for Windows Task View.
+The top-left corner is not configurable and reserved to
+launch the *Windows Task View* on hovering.
 
 
 Build
 -----
+With [Microsoft Visual Studio](https://visualstudio.microsoft.com):
 ```
 > git clone https://github.com/matgat/win-hotcorners.git
 > msbuild msvc/hotcorners.vcxproj -t:hotcorners -p:Configuration=Release|x64
