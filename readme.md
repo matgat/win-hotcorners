@@ -11,9 +11,15 @@ inspired by [Tavis Ormandy](mailto:taviso@cmpxchg8b.com)'s
 
 Configure
 ---------
-Edit the hard-coded string literal `ACTIONS_FOLDER`
-setting the path to the folder where you plan to put the links
-of your actions:
+Set the path to the folder where you plan to put the links
+of your actions either recompiling after editing the hard-coded
+string literal defined in `ACTIONS_FOLDER` or just making a
+*junction* to your existing folder:
+```
+> mklink /j  path\in\ACTIONS_FOLDER  path\to\existing-folder
+```
+
+Create there the links to your actions:
 |                               |                               |
 |-------------------------------|-------------------------------|
 | `left-band-left-click.lnk`    | left band left click          |
@@ -62,8 +68,7 @@ Windows binary is dynamically linked to Microsoft c++ runtime,
 so needs the installation of
 [`VC_redist.x64.exe`](https://aka.ms/vs/17/release/vc_redist.x64.exe)
 as prerequisite.
-Autostart the executable,
-for example creating a *shortcut* in `shell:startup`.
+Autostart the executable, for example creating a *shortcut* in `shell:startup`.
 
 
 Uninstall

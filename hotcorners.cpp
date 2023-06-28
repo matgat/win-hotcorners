@@ -19,34 +19,23 @@
 //  Settings
 constexpr int corner_size = 5; // [pix] Corner area size
 constexpr unsigned int dwell_time = 300; // [ms] Cursor dwell time for auto-trigger
-#define ACTIONS_FOLDER "C:\\Users\\user\\sys\\corner-actions\\"
+//#define ACTIONS_FOLDER "C:\\Users\\user\\sys\\corner-actions\\"
+#define ACTIONS_FOLDER "C:\\Users\\matteo.gattanini\\sys\\corner-actions\\"
 //  ---------------------------------------------
-// MS Windows stuff
 #include <windows.h>
-    // DWORD, RECT, POINT, LPVOID, LPSTR, HINSTANCE, ...
-    // HANDLE, INVALID_HANDLE_VALUE, CloseHandle, CreateThread, TerminateThread
-    // GetSystemMetrics, SM_CXSCREEN
-    // HHOOK, MSLLHOOKSTRUCT, SetWindowsHookEx, CallNextHookEx, UnhookWindowsHookEx
-    // MSG, LRESULT, CALLBACK, WPARAM, LPARAM, GetMessage, DispatchMessage, ...
-    // WM_LBUTTONDOWN, ...
-    // BYTE, GetKeyboardState, GetCursorPos, SendInput
 #include <shellapi.h> // ShellExecuteEx, SHELLEXECUTEINFO
-//#pragma comment(lib, "USER32")
-//#pragma comment(linker, "/SUBSYSTEM:WINDOWS")
-// Note: On a '_WIN64' system, 'C:\Windows\System32\user32.dll' is a 64-bit library
-//       The 32-bit version is in 'C:\Windows\SysWOW64\user32.dll'
-
+//  ---------------------------------------------
 #include <array> // std::array
 #include <cstdint> // std::int16_t
-
 
     // Debug facility
   #ifdef _DEBUG
     #include <format> // std::format
-    #define EVTLOG(s,...) ::OutputDebugString(std::format(s "\n",__VA_ARGS__).c_str());
+    #define DBGLOG(s,...) ::OutputDebugString(std::format(s "\n",__VA_ARGS__).c_str());
   #else
-    #define EVTLOG(...)
+    #define DBGLOG(...)
   #endif
+
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -65,7 +54,7 @@ enum class mouse_event_t : char
 //---------------------------------------------------------------------------
 constexpr mouse_event_t get_event_id(const WPARAM win_mouse_event_id, const DWORD add_data) noexcept
 {
-    struct local
+    struct local final
        {// Extract high word as signed
         [[nodiscard]] static inline constexpr std::int16_t hi_word(const DWORD dw) noexcept
            {
@@ -124,11 +113,11 @@ class action_t final
 
 /////////////////////////////////////////////////////////////////////////////
 struct event_action_pair_t final
-  {
-   mouse_event_t event;
-   action_t action;
-  };
-template<std::size_t N> class actions_map_t
+   {
+    mouse_event_t event;
+    action_t action;
+   };
+template<std::size_t N> class actions_map_t final
 {
  private:
     event_action_pair_t elements[N];
@@ -225,7 +214,7 @@ void determine_screen_regions(const int size) noexcept
                 Rscreen.left + size, // right
                 Rscreen.top + size // bottom
             };
-    EVTLOG("top-left area: {};{} , {};{}", top_left_rect.left, top_left_rect.top, top_left_rect.right, top_left_rect.bottom)
+    DBGLOG("top-left area: {};{} , {};{}", top_left_rect.left, top_left_rect.top, top_left_rect.right, top_left_rect.bottom)
 
 
     top_right_rect =
@@ -235,7 +224,7 @@ void determine_screen_regions(const int size) noexcept
                 Rscreen.right + 1, // right
                 Rscreen.top + size // bottom
             };
-    EVTLOG("top-right area: {};{} , {};{}", top_right_rect.left, top_right_rect.top, top_right_rect.right, top_right_rect.bottom)
+    DBGLOG("top-right area: {};{} , {};{}", top_right_rect.left, top_right_rect.top, top_right_rect.right, top_right_rect.bottom)
 
     top_band_rect =
         RECT{
@@ -244,7 +233,7 @@ void determine_screen_regions(const int size) noexcept
                 Rscreen.right - (Rscreen.right - Rscreen.left)/3, // right
                 Rscreen.top + 1 // bottom
             };
-    EVTLOG("top-band area: {};{} , {};{}", top_band_rect.left, top_band_rect.top, top_band_rect.right, top_band_rect.bottom)
+    DBGLOG("top-band area: {};{} , {};{}", top_band_rect.left, top_band_rect.top, top_band_rect.right, top_band_rect.bottom)
 
     left_band_rect =
         RECT{
@@ -253,7 +242,7 @@ void determine_screen_regions(const int size) noexcept
                 Rscreen.left + 1, // right
                 Rscreen.bottom - (Rscreen.bottom - Rscreen.top)/3 // bottom
             };
-    EVTLOG("left-band area: {};{} , {};{}", left_band_rect.left, left_band_rect.top, left_band_rect.right, left_band_rect.bottom)
+    DBGLOG("left-band area: {};{} , {};{}", left_band_rect.left, left_band_rect.top, left_band_rect.right, left_band_rect.bottom)
 
     right_band_rect =
         RECT{
@@ -262,7 +251,7 @@ void determine_screen_regions(const int size) noexcept
                 Rscreen.right + 1, // right
                 Rscreen.bottom - (Rscreen.bottom - Rscreen.top)/3 // bottom
             };
-    EVTLOG("right-band area: {};{} , {};{}", right_band_rect.left, right_band_rect.top, right_band_rect.right, right_band_rect.bottom)
+    DBGLOG("right-band area: {};{} , {};{}", right_band_rect.left, right_band_rect.top, right_band_rect.right, right_band_rect.bottom)
 }
 
 
@@ -288,7 +277,7 @@ void determine_screen_regions(const int size) noexcept
 //---------------------------------------------------------------------------
 [[nodiscard]] inline bool is_modifier_key_pressed() noexcept
 {
-    struct local
+    struct local final
        {// Key is down if the most significant bit is 1
         [[nodiscard]] static inline constexpr bool is_down(const BYTE b) noexcept { return (b & 0x80); }
        };
@@ -362,7 +351,7 @@ static LRESULT CALLBACK mouseHookCallback(int nCode, WPARAM wParam, LPARAM lPara
 
         // Zones that trigger with an action: check other mouse events
         if( wParam!=WM_MOUSEMOVE )
-           {//EVTLOG("WM_MOUSE* {:#06x}",wParam)
+           {//DBGLOG("WM_MOUSE* {:#06x}",wParam)
             const mouse_event_t event_id = get_event_id(wParam, evt->mouseData);
 
             #define SELECT_ACTION(ZONE)\
@@ -375,7 +364,7 @@ static LRESULT CALLBACK mouseHookCallback(int nCode, WPARAM wParam, LPARAM lPara
                     case mouse_event_t::wheel_up: ZONE##_actions[mouse_event_t::wheel_up].execute(); break;\
                     case mouse_event_t::wheel_down: ZONE##_actions[mouse_event_t::wheel_down].execute(); break;\
                     case mouse_event_t::unknown: break;\
-                   } // EVTLOG("Event {} in {} (cursor {};{})", event_id, #ZONE, cursor_pos.x, cursor_pos.y)
+                   } // DBGLOG("Event {} in {} (cursor {};{})", event_id, #ZONE, cursor_pos.x, cursor_pos.y)
 
             if( is_point_inside(top_right_rect, cursor_pos) )
                {
@@ -406,7 +395,7 @@ static LRESULT CALLBACK mouseHookCallback(int nCode, WPARAM wParam, LPARAM lPara
                 // Start auto-trigger check thread (if not already started)
                 if( h==INVALID_HANDLE_VALUE )
                    {
-                    EVTLOG("Entered top left corner {};{}", cursor_pos.x, cursor_pos.y)
+                    DBGLOG("Entered top left corner {};{}", cursor_pos.x, cursor_pos.y)
                     h = ::CreateThread( nullptr,           // LPSECURITY_ATTRIBUTES   lpThreadAttributes
                                         0,                 // SIZE_T                  dwStackSize
                                         check_autotrigger, // LPTHREAD_START_ROUTINE  lpStartAddress
@@ -417,11 +406,11 @@ static LRESULT CALLBACK mouseHookCallback(int nCode, WPARAM wParam, LPARAM lPara
                }
             else
                {// Not in "top left" area
-                //EVTLOG("Cursor {};{} not in R[{};{},{};{}]", cursor_pos.x, cursor_pos.y, top_left_rect.left, top_left_rect.top, top_left_rect.right, top_left_rect.bottom)
+                //DBGLOG("Cursor {};{} not in R[{};{},{};{}]", cursor_pos.x, cursor_pos.y, top_left_rect.left, top_left_rect.top, top_left_rect.right, top_left_rect.bottom)
                 // Abort auto-trigger check thread (if running)
                 if( h!=INVALID_HANDLE_VALUE )
                    {
-                    EVTLOG("Exited top left corner {};{}", cursor_pos.x, cursor_pos.y)
+                    DBGLOG("Exited top left corner {};{}", cursor_pos.x, cursor_pos.y)
                     ::TerminateThread(h, 0);
                     ::CloseHandle(h);
                     h = INVALID_HANDLE_VALUE;
@@ -438,11 +427,8 @@ static LRESULT CALLBACK mouseHookCallback(int nCode, WPARAM wParam, LPARAM lPara
 //---------------------------------------------------------------------------
 int CALLBACK WinMain(HINSTANCE, HINSTANCE, LPSTR, int) //int main()
 {
-    EVTLOG("hotcorners " __DATE__ " " __TIME__)
+    DBGLOG("hotcorners " __DATE__ " " __TIME__)
     determine_screen_regions(corner_size);
-
-    // Register a global key shortcut to quit this program?
-    //::RegisterHotKey(NULL, 1, MOD_CONTROL | MOD_ALT, 'Q'); // CTRL+ALT+Q
 
     // Intercept mouse events
     HHOOK mouse_hook = ::SetWindowsHookEx(WH_MOUSE_LL, mouseHookCallback, NULL, 0);
@@ -452,11 +438,11 @@ int CALLBACK WinMain(HINSTANCE, HINSTANCE, LPSTR, int) //int main()
        }
 
     // Message pump for 'WH_MOUSE_LL'
-    MSG Msg;
-    while( ::GetMessage(&Msg, NULL, 0, 0) )
+    // Note: WM_QUIT will cause ::GetMessage to return NULL
+    MSG msg;
+    while( ::GetMessage(&msg, NULL, 0, 0) )
        {
-        //if(Msg.message == WM_HOTKEY) break; // Quit on hotkey
-        ::DispatchMessage(&Msg);
+        ::DispatchMessage(&msg);
        }
 
     // Finally
