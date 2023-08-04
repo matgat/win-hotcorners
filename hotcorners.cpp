@@ -19,8 +19,7 @@
 //  Settings
 constexpr int corner_size = 5; // [pix] Corner area size
 constexpr unsigned int dwell_time = 300; // [ms] Cursor dwell time for auto-trigger
-//#define ACTIONS_FOLDER "C:\\Users\\user\\sys\\corner-actions\\"
-#define ACTIONS_FOLDER "C:\\Users\\matteo.gattanini\\sys\\corner-actions\\"
+#define ACTIONS_FOLDER "C:\\Users\\user\\sys\\corner-actions\\"
 //  ---------------------------------------------
 #include <windows.h>
 #include <shellapi.h> // ShellExecuteEx, SHELLEXECUTEINFO
@@ -263,18 +262,6 @@ void determine_screen_regions(const int size) noexcept
 
 
 //---------------------------------------------------------------------------
-[[nodiscard]] inline bool is_cursor_inside(const RECT& r) noexcept
-   {
-    POINT cur_pos;
-    if( ::GetCursorPos(&cur_pos) )
-       {
-        return is_point_inside(r, cur_pos);
-       }
-    return false;
-   }
-
-
-//---------------------------------------------------------------------------
 [[nodiscard]] inline bool is_modifier_key_pressed() noexcept
 {
     struct local final
@@ -315,13 +302,28 @@ inline void activate_task_view() noexcept
 
 //---------------------------------------------------------------------------
 // Check auto-trigger if the cursor stays in the zone without any activity
-static DWORD WINAPI check_autotrigger(LPVOID lpParameter) noexcept
+static DWORD WINAPI check_autotrigger_in(LPVOID lpParameter) noexcept
 {
+    // The input parameter is a pointer to the RECT of the zone
+    const RECT* const zone_rect = reinterpret_cast<const RECT *>(lpParameter);
+
     ::Sleep( dwell_time ); // This should be nice for CPU load
 
     // No auto-trigger if the cursor left the zone
-    const RECT* const zone_rect = reinterpret_cast<const RECT *>(lpParameter);
-    if( !is_cursor_inside(*zone_rect) )
+    // I have to check the new position of the cursor
+    struct local final
+       {
+        [[nodiscard]] static inline bool is_cursor_inside(const RECT& r) noexcept
+           {
+            POINT cur_pos;
+            if( ::GetCursorPos(&cur_pos) )
+               {
+                return is_point_inside(r, cur_pos);
+               }
+            return false;
+           }
+       };
+    if( !local::is_cursor_inside(*zone_rect) )
        {
         return 1;
        }
@@ -396,12 +398,12 @@ static LRESULT CALLBACK mouseHookCallback(int nCode, WPARAM wParam, LPARAM lPara
                 if( h==INVALID_HANDLE_VALUE )
                    {
                     DBGLOG("Entered top left corner {};{}", cursor_pos.x, cursor_pos.y)
-                    h = ::CreateThread( nullptr,           // LPSECURITY_ATTRIBUTES   lpThreadAttributes
-                                        0,                 // SIZE_T                  dwStackSize
-                                        check_autotrigger, // LPTHREAD_START_ROUTINE  lpStartAddress
-                                        (LPVOID) &top_left_rect, // LPVOID            lpParameter
-                                        0,                 // DWORD                   dwCreationFlags
-                                        nullptr );         // LPDWORD                 lpThreadId
+                    h = ::CreateThread( nullptr, // LPSECURITY_ATTRIBUTES lpThreadAttributes
+                                        0, // SIZE_T dwStackSize
+                                        check_autotrigger_in, // LPTHREAD_START_ROUTINE lpStartAddress
+                                        (LPVOID) &top_left_rect, // LPVOID lpParameter
+                                        0, // DWORD dwCreationFlags
+                                        nullptr ); // LPDWORD lpThreadId
                    }
                }
             else
@@ -451,11 +453,10 @@ int CALLBACK WinMain(HINSTANCE, HINSTANCE, LPSTR, int) //int main()
 }
 
 
-
+// Ehmm, maybe in the future...
 //#include <windows.h>
 //#include <gdiplus.h>
 //using namespace Gdiplus;
-//
 //void draw()
 //{
 //   // start up GDI+ -- only need to do this once per process at startup

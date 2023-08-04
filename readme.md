@@ -12,11 +12,12 @@ inspired by [Tavis Ormandy](mailto:taviso@cmpxchg8b.com)'s
 Configure
 ---------
 Set the path to the folder where you plan to put the links
-of your actions either recompiling after editing the hard-coded
-string literal defined in `ACTIONS_FOLDER` or just making a
-*junction* to your existing folder:
+of your actions recompiling after editing the hard-coded
+string literal defined in `ACTIONS_FOLDER`.
+To avoid recompilation you can try to create a *junction*
+to your existing folder:
 ```
-> mklink /j  path\in\ACTIONS_FOLDER  path\to\existing-folder
+> mklink /j  "C:\Users\user\sys\corner-actions"  path\to\existing-folder
 ```
 
 Create there the links to your actions:
