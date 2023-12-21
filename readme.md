@@ -60,7 +60,7 @@ Build
 With [Microsoft Visual Studio](https://visualstudio.microsoft.com):
 ```
 > git clone https://github.com/matgat/win-hotcorners.git
-> msbuild msvc/hotcorners.vcxproj -t:hotcorners -p:Configuration=Release|x64
+> msbuild msvc/hotcorners.vcxproj -t:Rebuild -p:Configuration=Release -p:Platform=x64
 ```
 
 Install
