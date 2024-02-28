@@ -1,0 +1,26 @@
+name: ms-build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+
+    env:
+      PROJECT_FILE_PATH: build/hotcorners.vcxproj
+      BUILD_CONFIGURATION: Release
+      BUILD_PLATFORM: x64
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Add msbuild to PATH
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Build-App
+      working-directory: ${{env.GITHUB_WORKSPACE}}
+      run: msbuild ${{env.PROJECT_FILE_PATH}} -t:rebuild -p:Configuration=${{env.BUILD_CONFIGURATION}} -p:Platform=${{env.BUILD_PLATFORM}}
