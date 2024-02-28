@@ -17,9 +17,9 @@
 //             └────────────────┘
 //  ---------------------------------------------
 //  Settings
-constexpr int corner_size = 5; // [pix] Corner area size
-constexpr unsigned int dwell_time = 300; // [ms] Cursor dwell time for auto-trigger
-#define ACTIONS_FOLDER "C:\\Users\\user\\sys\\corner-actions\\"
+inline static constexpr int corner_size = 5; // [pix] Corner area size
+inline static constexpr unsigned int dwell_time = 300; // [ms] Cursor dwell time for auto-trigger
+#define ACTIONS_FOLDER "hotcorners\\"
 //  ---------------------------------------------
 #include <windows.h>
 #include <shellapi.h> // ShellExecuteEx, SHELLEXECUTEINFO
@@ -27,7 +27,7 @@ constexpr unsigned int dwell_time = 300; // [ms] Cursor dwell time for auto-trig
 #include <array> // std::array
 #include <cstdint> // std::int16_t
 
-    // Debug facility
+
   #ifdef _DEBUG
     #include <format> // std::format
     #define DBGLOG(s,...) ::OutputDebugString(std::format(s "\n",__VA_ARGS__).c_str());
@@ -82,7 +82,6 @@ class action_t final
     const char* m_command;
 
  public:
-
     constexpr action_t(const char* const cstr =nullptr) noexcept
       : m_command(cstr)
        {}
@@ -150,10 +149,10 @@ template<std::size_t N> class actions_map_t final
 // while actions at compile time
 
 RECT top_left_rect{};
-//constexpr actions_map_t top_left_actions = <mouse-dwell: task view (WIN+TAB)>
+//inline static constexpr actions_map_t top_left_actions = <mouse-dwell: task view (WIN+TAB)>
 
 RECT top_right_rect{};
-constexpr actions_map_t top_right_actions =
+inline static constexpr actions_map_t top_right_actions =
   {{
     {mouse_event_t::left_button, ACTIONS_FOLDER "top-right-left-click.lnk"},
     {mouse_event_t::middle_button, ACTIONS_FOLDER "top-right-middle-click.lnk"},
@@ -162,7 +161,7 @@ constexpr actions_map_t top_right_actions =
   }};
 
 RECT top_band_rect{};
-constexpr actions_map_t top_band_actions =
+inline static constexpr actions_map_t top_band_actions =
   {{
     {mouse_event_t::left_button, ACTIONS_FOLDER "top-band-left-click.lnk"},
     {mouse_event_t::middle_button, ACTIONS_FOLDER "top-band-middle-click.lnk"},
@@ -172,7 +171,7 @@ constexpr actions_map_t top_band_actions =
   }};
 
 RECT left_band_rect{};
-constexpr actions_map_t left_band_actions =
+inline static constexpr actions_map_t left_band_actions =
   {{
     {mouse_event_t::left_button, ACTIONS_FOLDER "left-band-left-click.lnk"},
     {mouse_event_t::middle_button, ACTIONS_FOLDER "left-band-middle-click.lnk"},
@@ -182,7 +181,7 @@ constexpr actions_map_t left_band_actions =
   }};
 
 RECT right_band_rect{};
-constexpr actions_map_t right_band_actions =
+inline static constexpr actions_map_t right_band_actions =
   {{
     {mouse_event_t::left_button, ACTIONS_FOLDER "right-band-left-click.lnk"},
     {mouse_event_t::middle_button, ACTIONS_FOLDER "right-band-middle-click.lnk"},
@@ -288,13 +287,14 @@ void determine_screen_regions(const int size) noexcept
 //---------------------------------------------------------------------------
 inline void activate_task_view() noexcept
 {
-    // Windows task view is activated by Win+Tab key sequence
-    constexpr std::array<INPUT,4> inWinTab = {{
-                                                { INPUT_KEYBOARD, { VK_LWIN, 0 } },
-                                                { INPUT_KEYBOARD, { VK_TAB,  0 } },
-                                                { INPUT_KEYBOARD, { VK_TAB,  KEYEVENTF_KEYUP } },
-                                                { INPUT_KEYBOARD, { VK_LWIN, KEYEVENTF_KEYUP } }
-                                             }};
+    // Windows task view is activated by Win+Tab key sequence:
+    static constexpr std::array<INPUT,4> inWinTab =
+      {{
+        { INPUT_KEYBOARD, { VK_LWIN, 0 } },
+        { INPUT_KEYBOARD, { VK_TAB,  0 } },
+        { INPUT_KEYBOARD, { VK_TAB,  KEYEVENTF_KEYUP } },
+        { INPUT_KEYBOARD, { VK_LWIN, KEYEVENTF_KEYUP } }
+      }};
     ::SendInput( (UINT) inWinTab.size(), (LPINPUT) inWinTab.data(), sizeof(INPUT) );
     //if( ret!=inWinTab.size() ) failed
 }
@@ -338,6 +338,34 @@ static DWORD WINAPI check_autotrigger_in(LPVOID lpParameter) noexcept
 
     return 0;
 }
+
+/////////////////////////////////////////////////////////////////////////////
+class check_autotrigger_thread_t final
+{
+ private:
+    HANDLE m_handle = INVALID_HANDLE_VALUE;
+
+ public:
+    ~check_autotrigger_thread_t() noexcept
+       {
+        if( running() ) stop();
+       }
+
+    [[nodiscard]] bool running() const noexcept { return m_handle!=INVALID_HANDLE_VALUE; }
+
+    void start() noexcept
+       {
+        //                     sec-attrib stack   routine                   param          flags  id
+        m_handle = ::CreateThread(nullptr, 0, check_autotrigger_in, (LPVOID) &top_left_rect, 0, nullptr);
+       }
+
+    void stop() noexcept
+       {
+        ::TerminateThread(m_handle, 0);
+        ::CloseHandle(m_handle);
+        m_handle = INVALID_HANDLE_VALUE;
+       }
+};
 
 
 //---------------------------------------------------------------------------
@@ -390,38 +418,28 @@ static LRESULT CALLBACK mouseHookCallback(int nCode, WPARAM wParam, LPARAM lPara
         else
            {// Mouse movement
             // Top left corner is fixed: lingering with the mouse, triggers task view
-            static HANDLE h = INVALID_HANDLE_VALUE; // Thread checking "top left" zone autotrigger
+            static check_autotrigger_thread_t check_trigger; // "top left" zone autotrigger thread
 
             if( is_point_inside(top_left_rect, cursor_pos) )
-               {// In "top left" area
-                // Start auto-trigger check thread (if not already started)
-                if( h==INVALID_HANDLE_VALUE )
+               {
+                if( not check_trigger.running() )
                    {
                     DBGLOG("Entered top left corner {};{}", cursor_pos.x, cursor_pos.y)
-                    h = ::CreateThread( nullptr, // LPSECURITY_ATTRIBUTES lpThreadAttributes
-                                        0, // SIZE_T dwStackSize
-                                        check_autotrigger_in, // LPTHREAD_START_ROUTINE lpStartAddress
-                                        (LPVOID) &top_left_rect, // LPVOID lpParameter
-                                        0, // DWORD dwCreationFlags
-                                        nullptr ); // LPDWORD lpThreadId
+                    check_trigger.start();
                    }
                }
             else
-               {// Not in "top left" area
-                //DBGLOG("Cursor {};{} not in R[{};{},{};{}]", cursor_pos.x, cursor_pos.y, top_left_rect.left, top_left_rect.top, top_left_rect.right, top_left_rect.bottom)
-                // Abort auto-trigger check thread (if running)
-                if( h!=INVALID_HANDLE_VALUE )
+               {
+                if( check_trigger.running() )
                    {
                     DBGLOG("Exited top left corner {};{}", cursor_pos.x, cursor_pos.y)
-                    ::TerminateThread(h, 0);
-                    ::CloseHandle(h);
-                    h = INVALID_HANDLE_VALUE;
+                    check_trigger.stop();
                    }
                }
            }
        }
 
-    // Finally, pass this event to possible other hooks
+    // Pass this event to possible other hooks
     return ::CallNextHookEx(NULL, nCode, wParam, lParam);
 }
 
@@ -453,26 +471,31 @@ int CALLBACK WinMain(HINSTANCE, HINSTANCE, LPSTR, int) //int main()
 }
 
 
-// Ehmm, maybe in the future...
-//#include <windows.h>
+// Maybe in the future...
 //#include <gdiplus.h>
-//using namespace Gdiplus;
-//void draw()
+//class GdiPlusEnv final
 //{
-//   // start up GDI+ -- only need to do this once per process at startup
-//   GdiplusStartupInput gdiplusStartupInput;
-//   ULONG_PTR gdiplusToken;
-//   GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
+// private:
+//    ULONG_PTR m_token;
 //
+// public:
+//    GdiPlusEnv() noexcept
+//       {
+//        Gdiplus::GdiplusStartupInput startup_input;
+//        Gdiplus::GdiplusStartup(&m_token, &startup_input, NULL);
+//       }
 //
-//   Rect rect(20,20,50,50);
-//   Graphics grpx(dc);
-//   Image* image = new Image(L"SomePhoto.png");
-//   grpx.DrawImage(Img,rect);
+//    ~GdiPlusEnv() noexcept
+//       {
+//        Gdiplus::GdiplusShutdown(m_token);
+//       }
+//};
+//int main()
+//{
+//   GdiPlusEnv env;
 //
-//   delete image;
-//
-//   // shut down - only once per process
-//   GdiplusShutdown(gdiplusToken);
-//   return;
+//   Gdiplus::Rect rect(20,20,50,50);
+//   Gdiplus::Graphics grpx(dc);
+//   Gdiplus::Image image("SomePhoto.png");
+//   grpx.DrawImage(image,rect);
 //}
