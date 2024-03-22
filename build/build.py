@@ -11,7 +11,7 @@ projectname = "hotcorners"
 configuration = "Release"
 platform = "x64"
 build_cmd = ["msbuild", f"{projectname}.vcxproj", "-t:rebuild", f"-p:Configuration={configuration}", f"-p:Platform={platform}"]
-exe = f"win-{platform}-{configuration}/{projectname}.exe"
+exe = f"bin/win-{platform}-{configuration}/{projectname}.exe"
 
 
 

@@ -110,6 +110,7 @@ With [Microsoft Visual Studio](https://visualstudio.microsoft.com):
 
 ```batch
 > git clone https://github.com/matgat/win-hotcorners.git
-> msbuild win-hotcorners/build/hotcorners.vcxproj -t:Rebuild -p:Configuration=Release -p:Platform=x64
-> ./win-hotcorners/build/win-x64-Release/hotcorners.exe
+> cd win-hotcorners/build
+> msbuild hotcorners.vcxproj -t:Rebuild -p:Configuration=Release -p:Platform=x64
+> ./bin/win-x64-Release/hotcorners.exe
 ```

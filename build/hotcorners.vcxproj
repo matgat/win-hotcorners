@@ -16,9 +16,10 @@
     <WindowsTargetPlatformVersion>10.0.19041.0</WindowsTargetPlatformVersion>
     <ConfigurationType>Application</ConfigurationType>
     <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>UTF-8</CharacterSet>
     <Platform Condition="'$(Platform)'==''">x64</Platform>
     <IntDir>$(TEMP)\hotcorners-$(Platform)-$(Configuration)\</IntDir>
-    <OutDir>win-$(Platform)-$(Configuration)\</OutDir>
+    <OutDir>bin\win-$(Platform)-$(Configuration)\</OutDir>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
@@ -50,7 +51,6 @@
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>kernel32.lib;shell32.lib;Shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -78,7 +78,6 @@
       <GenerateDebugInformation>false</GenerateDebugInformation>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
-      <AdditionalDependencies>kernel32.lib;shell32.lib;Shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
     </Link>
   </ItemDefinitionGroup>
@@ -87,7 +86,7 @@
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
-  <Target Name="PrintTargetPath" AfterTargets="Build">
-    <Message Importance="high" Text="TargetPath is: $(TargetPath)" />
+  <Target Name="PrintInfo" BeforeTargets="ClCompile">
+    <Message Importance="high" Text="ver=$(VisualStudioVersion) tgt=$(TargetPath)" />
   </Target>
 </Project>
