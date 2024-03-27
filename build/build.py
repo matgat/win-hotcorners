@@ -35,7 +35,8 @@ def set_title(title):
 #----------------------------------------------------------------------------
 def is_temp_console():
     parent_process = psutil.Process(os.getpid()).parent().name()
-    temp_parents = re.compile(r"(?i)^(py.exe|explorer.*|.*terminal)$")
+    temp_parents = re.compile(r"(?i)^(?:py|python|explorer)\.exe|.*terminal$")
+    #print(f"{parent_process} {'is' if temp_parents.match(parent_process) else 'is not'} temp")
     return temp_parents.match(parent_process)
 
 #----------------------------------------------------------------------------
@@ -71,7 +72,7 @@ def main():
 
     print(f"\n{BLUE}Building {CYAN}{projectname}{END}")
     if (build_ret:=launch(build_cmd))!=0:
-        closing_bad(f"Build error")
+        closing_bad("Build error")
         return build_ret
 
     if not os.path.isfile(exe):
