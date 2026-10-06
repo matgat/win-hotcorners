@@ -196,7 +196,10 @@ inline static constexpr actions_map_t right_band_actions =
 void determine_screen_regions(const int size) noexcept
 {
     // Retrieve the rectangle of the first monitor
+    // ! Enable DPI awareness !
+    //::SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     const RECT Rscreen{ 0, 0, ::GetSystemMetrics(SM_CXSCREEN), ::GetSystemMetrics(SM_CYSCREEN) };
+    DBGLOG("Screen: x[{}|{}] y[{}|{}]", Rscreen.left, Rscreen.right, Rscreen.top, Rscreen.bottom)
 
     //                   [top]
     //  [top-left] ┌─┬──════════──┬─┐ [top-right]
@@ -212,7 +215,7 @@ void determine_screen_regions(const int size) noexcept
                 Rscreen.left + size, // right
                 Rscreen.top + size // bottom
             };
-    DBGLOG("top-left area: {};{} , {};{}", top_left_rect.left, top_left_rect.top, top_left_rect.right, top_left_rect.bottom)
+    DBGLOG("top-left area: x[{}|{}] y[{}|{}]", top_left_rect.left, top_left_rect.right, top_left_rect.top, top_left_rect.bottom)
 
 
     top_right_rect =
@@ -222,7 +225,7 @@ void determine_screen_regions(const int size) noexcept
                 Rscreen.right + 1, // right
                 Rscreen.top + size // bottom
             };
-    DBGLOG("top-right area: {};{} , {};{}", top_right_rect.left, top_right_rect.top, top_right_rect.right, top_right_rect.bottom)
+    DBGLOG("top-right area: x[{}|{}] y[{}|{}]", top_right_rect.left, top_right_rect.right, top_right_rect.top, top_right_rect.bottom)
 
     top_band_rect =
         RECT{
@@ -231,7 +234,7 @@ void determine_screen_regions(const int size) noexcept
                 Rscreen.right - (Rscreen.right - Rscreen.left)/3, // right
                 Rscreen.top + 1 // bottom
             };
-    DBGLOG("top-band area: {};{} , {};{}", top_band_rect.left, top_band_rect.top, top_band_rect.right, top_band_rect.bottom)
+    DBGLOG("top-band area: x[{}|{}] y[{}|{}]", top_band_rect.left, top_band_rect.right, top_band_rect.top, top_band_rect.bottom)
 
     left_band_rect =
         RECT{
@@ -240,7 +243,7 @@ void determine_screen_regions(const int size) noexcept
                 Rscreen.left + 1, // right
                 Rscreen.bottom - (Rscreen.bottom - Rscreen.top)/3 // bottom
             };
-    DBGLOG("left-band area: {};{} , {};{}", left_band_rect.left, left_band_rect.top, left_band_rect.right, left_band_rect.bottom)
+    DBGLOG("left-band area: x[{}|{}] y[{}|{}]", left_band_rect.left, left_band_rect.right, left_band_rect.top, left_band_rect.bottom)
 
     right_band_rect =
         RECT{
@@ -249,14 +252,14 @@ void determine_screen_regions(const int size) noexcept
                 Rscreen.right + 1, // right
                 Rscreen.bottom - (Rscreen.bottom - Rscreen.top)/3 // bottom
             };
-    DBGLOG("right-band area: {};{} , {};{}", right_band_rect.left, right_band_rect.top, right_band_rect.right, right_band_rect.bottom)
+    DBGLOG("right-band area: x[{}|{}] y[{}|{}]", right_band_rect.left, right_band_rect.right, right_band_rect.top, right_band_rect.bottom)
 }
 
 
 //---------------------------------------------------------------------------
 [[nodiscard]] inline constexpr bool is_point_inside(const RECT& r, const POINT& p) noexcept
    {
-    return p.x>=r.left && p.x<=r.right && p.y>=r.top && p.y<r.bottom;
+    return p.x>=r.left and p.x<=r.right and p.y>=r.top and p.y<r.bottom;
    }
 
 
@@ -272,12 +275,12 @@ void determine_screen_regions(const int size) noexcept
 
     if( ::GetKeyboardState(keyboard_status) )
        {
-        return local::is_down(keyboard_status[VK_SHIFT]) ||
-               local::is_down(keyboard_status[VK_CONTROL]) ||
-               local::is_down(keyboard_status[VK_MENU]) ||
-               local::is_down(keyboard_status[VK_LWIN]) ||
-               local::is_down(keyboard_status[VK_RWIN]) ||
-               local::is_down(keyboard_status[VK_LBUTTON]) ||
+        return local::is_down(keyboard_status[VK_SHIFT]) or
+               local::is_down(keyboard_status[VK_CONTROL]) or
+               local::is_down(keyboard_status[VK_MENU]) or
+               local::is_down(keyboard_status[VK_LWIN]) or
+               local::is_down(keyboard_status[VK_RWIN]) or
+               local::is_down(keyboard_status[VK_LBUTTON]) or
                local::is_down(keyboard_status[VK_RBUTTON]);
        }
     return false;
@@ -323,7 +326,7 @@ static DWORD WINAPI check_autotrigger_in(LPVOID lpParameter) noexcept
             return false;
            }
        };
-    if( !local::is_cursor_inside(*zone_rect) )
+    if( not local::is_cursor_inside(*zone_rect) )
        {
         return 1;
        }
@@ -378,6 +381,13 @@ static LRESULT CALLBACK mouseHookCallback(int nCode, WPARAM wParam, LPARAM lPara
         //    DWORD     mouseData   // WM_MOUSEWHEEL: hiword>0:wheel-fwd, hiword<0:wheel-bck
         //                          // WM_*BUTTON*: hiword=1:btn1, hiword=2:btn2
         const POINT& cursor_pos = evt->pt;
+
+      #ifdef _DEBUG
+        if( wParam==WM_XBUTTONDOWN )
+           {
+            DBGLOG("Mouse: {};{}", cursor_pos.x, cursor_pos.y)
+           }
+      #endif
 
         // Zones that trigger with an action: check other mouse events
         if( wParam!=WM_MOUSEMOVE )
@@ -452,7 +462,7 @@ int CALLBACK WinMain(HINSTANCE, HINSTANCE, LPSTR, int) //int main()
 
     // Intercept mouse events
     HHOOK mouse_hook = ::SetWindowsHookEx(WH_MOUSE_LL, mouseHookCallback, NULL, 0);
-    if( !mouse_hook  )
+    if( not mouse_hook  )
        {
         return 1;
        }
