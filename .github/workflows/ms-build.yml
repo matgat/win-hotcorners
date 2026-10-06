@@ -5,6 +5,14 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-test:
@@ -16,11 +24,17 @@ jobs:
       BUILD_PLATFORM: x64
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - name: Add msbuild to PATH
-      uses: microsoft/setup-msbuild@v2
+      uses: microsoft/setup-msbuild@v3
 
     - name: Build-App
-      working-directory: ${{env.GITHUB_WORKSPACE}}
-      run: msbuild ${{env.PROJECT_FILE_PATH}} -t:rebuild -p:Configuration=${{env.BUILD_CONFIGURATION}} -p:Platform=${{env.BUILD_PLATFORM}}
+      shell: pwsh
+      run: >
+        msbuild "$env:PROJECT_FILE_PATH"
+        -t:Rebuild
+        -m
+        -p:Configuration=$env:BUILD_CONFIGURATION
+        -p:Platform=$env:BUILD_PLATFORM
+        -p:WindowsTargetPlatformVersion=10.0
